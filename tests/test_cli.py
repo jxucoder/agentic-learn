@@ -256,9 +256,48 @@ class TestHandleCommand:
         assert result is False  # Signals exit
 
     async def test_unknown_command(self, agent):
-        """Test unknown command."""
+        """Test unknown command shows error but continues."""
         result = await handle_command("/unknown", agent)
-        assert result is False
+        assert result is True  # Handled (error shown, but continue)
+
+
+# =============================================================================
+# Session Command Tests
+# =============================================================================
+
+
+class TestSessionCommands:
+    """Tests for session-related commands."""
+
+    @pytest.fixture
+    def agent(self):
+        """Create a mock agent."""
+        config = AgentConfig(model="test", provider="anthropic")
+        return Agent(config=config)
+
+    async def test_save_command(self, agent):
+        """Test /save command."""
+        from agentic_learn.core.types import Message
+
+        agent.state.messages.append(Message.user("test message"))
+
+        result = await handle_command("/save Test Session", agent)
+        assert result is True
+
+    async def test_sessions_command(self, agent):
+        """Test /sessions command."""
+        result = await handle_command("/sessions", agent)
+        assert result is True
+
+    async def test_load_without_id(self, agent):
+        """Test /load without ID shows error."""
+        result = await handle_command("/load", agent)
+        assert result is True  # Shows error but continues
+
+    async def test_delete_without_id(self, agent):
+        """Test /delete without ID shows error."""
+        result = await handle_command("/delete", agent)
+        assert result is True  # Shows error but continues
 
 
 # =============================================================================
@@ -274,3 +313,8 @@ class TestCLIIntegration:
         # This would require more complex mocking of the entire agent run
         # For now, just verify the CLI structure is correct
         pass
+
+    def test_sessions_flag(self):
+        """Test --sessions flag."""
+        result = runner.invoke(app, ["--sessions"])
+        assert result.exit_code == 0
