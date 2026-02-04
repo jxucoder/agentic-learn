@@ -14,6 +14,13 @@ from agentic_learn.core.types import (
 from agentic_learn.core.tool import Tool, tool
 from agentic_learn.core.extension import Extension, ExtensionContext
 from agentic_learn.core.session import SessionManager, SessionMetadata
+from agentic_learn.core.sandbox import (
+    Sandbox,
+    SandboxConfig,
+    SandboxResult,
+    ProcessSandbox,
+    DockerSandbox,
+)
 
 __all__ = [
     "Agent",
@@ -31,4 +38,9 @@ __all__ = [
     "ExtensionContext",
     "SessionManager",
     "SessionMetadata",
+    "Sandbox",
+    "SandboxConfig",
+    "SandboxResult",
+    "ProcessSandbox",
+    "DockerSandbox",
 ]

@@ -15,7 +15,12 @@ from agentic_learn.core.types import ToolResult
 
 
 class BashTool(Tool):
-    """Execute bash commands."""
+    """Execute bash commands with optional sandboxing.
+
+    Can run in two modes:
+    - Normal: Full access to system (default)
+    - Sandboxed: Isolated execution with resource limits
+    """
 
     name = "bash"
     description = """Execute bash commands in the shell.
@@ -32,12 +37,13 @@ Features:
 - Captures stdout and stderr
 - Timeout support (default: 120 seconds)
 - Working directory control
-- Environment variable support
+- Optional sandboxed mode for untrusted commands
 
 Safety:
 - Commands run in the agent's working directory
 - Long-running commands will timeout
 - Use background=true for commands that don't need output
+- Use sandboxed=true for restricted execution
 
 Examples:
 - bash command="python train.py --epochs 10"
@@ -73,7 +79,18 @@ Examples:
             required=False,
             default=False,
         ),
+        ToolParameter(
+            name="sandboxed",
+            type=bool,
+            description="Run in isolated sandbox with resource limits (default: false)",
+            required=False,
+            default=False,
+        ),
     ]
+
+    def __init__(self, sandbox_by_default: bool = False):
+        super().__init__()
+        self.sandbox_by_default = sandbox_by_default
 
     async def execute(
         self,
@@ -82,8 +99,24 @@ Examples:
         timeout: int = 120,
         cwd: str | None = None,
         background: bool = False,
+        sandboxed: bool = False,
     ) -> ToolResult:
-        """Execute a bash command."""
+        """Execute a bash command.
+
+        Args:
+            ctx: Tool execution context
+            command: Bash command to execute
+            timeout: Timeout in seconds
+            cwd: Working directory (default: current)
+            background: Run without waiting for output
+            sandboxed: Run in isolated sandbox with resource limits
+        """
+        # Use sandbox if requested or if default
+        use_sandbox = sandboxed or self.sandbox_by_default
+
+        if use_sandbox:
+            return await self._execute_sandboxed(command, timeout)
+
         # Resolve working directory
         working_dir = Path(cwd) if cwd else Path(ctx.cwd)
         if not working_dir.is_absolute():
@@ -117,6 +150,34 @@ Examples:
                 content=f"Error executing command: {str(e)}",
                 is_error=True,
             )
+
+    async def _execute_sandboxed(self, command: str, timeout: int) -> ToolResult:
+        """Execute command in a sandbox with resource limits."""
+        from agentic_learn.core.sandbox import Sandbox, SandboxConfig
+
+        config = SandboxConfig(
+            max_wall_time=timeout,
+            max_memory_mb=256,
+            network_enabled=False,
+        )
+
+        sandbox = Sandbox.create(config)
+        try:
+            result = await sandbox.run_bash(command, timeout=float(timeout))
+
+            return ToolResult(
+                tool_call_id="",
+                content=result.output,
+                is_error=not result.success,
+                metadata={
+                    "sandboxed": True,
+                    "exit_code": result.exit_code,
+                    "timed_out": result.timed_out,
+                    "memory_exceeded": result.memory_exceeded,
+                },
+            )
+        finally:
+            await sandbox.cleanup()
 
     def _check_dangerous(self, command: str) -> str | None:
         """Check for potentially dangerous commands."""

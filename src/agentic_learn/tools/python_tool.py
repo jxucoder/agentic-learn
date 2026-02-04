@@ -14,10 +14,18 @@ from agentic_learn.core.types import ToolResult
 
 
 class PythonTool(Tool):
-    """Execute Python code in a sandboxed environment.
+    """Execute Python code with optional sandboxing.
 
     Supports data science workflows with access to common libraries.
-    Maintains state across executions within the same session.
+    Can run in two modes:
+    - Normal: Persistent namespace, full access (default)
+    - Sandboxed: Isolated execution with resource limits
+
+    When sandboxed=True, code runs in isolation with:
+    - Memory limits (512MB default)
+    - CPU time limits (30s default)
+    - No persistent state between calls
+    - Restricted filesystem access
     """
 
     name = "python"
@@ -27,7 +35,7 @@ Features:
 - Persistent namespace: variables defined in one call are available in subsequent calls
 - Common libraries pre-imported: numpy, pandas, matplotlib, sklearn (if available)
 - Captures stdout, stderr, and the last expression value
-- Handles async code automatically
+- Optional sandboxed mode for untrusted code
 
 Use this for:
 - Data exploration and manipulation
@@ -51,12 +59,21 @@ Note: Long-running operations may timeout. Break large tasks into smaller steps.
             required=False,
             default=60.0,
         ),
+        ToolParameter(
+            name="sandboxed",
+            type=bool,
+            description="Run in isolated sandbox with resource limits (default: False)",
+            required=False,
+            default=False,
+        ),
     ]
 
-    def __init__(self):
+    def __init__(self, sandbox_by_default: bool = False):
         super().__init__()
-        # Persistent namespace for code execution
+        self.sandbox_by_default = sandbox_by_default
+        # Persistent namespace for code execution (non-sandboxed mode)
         self._namespace: dict[str, Any] = {}
+        self._sandbox = None
         self._setup_namespace()
 
     def _setup_namespace(self) -> None:
@@ -122,8 +139,59 @@ except ImportError:
         ctx: ToolContext,
         code: str,
         timeout: float = 60.0,
+        sandboxed: bool = False,
     ) -> ToolResult:
-        """Execute Python code and return the result."""
+        """Execute Python code and return the result.
+
+        Args:
+            ctx: Tool execution context
+            code: Python code to execute
+            timeout: Maximum execution time in seconds
+            sandboxed: If True, run in isolated sandbox with resource limits
+        """
+        # Use sandbox if requested or if default
+        use_sandbox = sandboxed or self.sandbox_by_default
+
+        if use_sandbox:
+            return await self._execute_sandboxed(code, timeout)
+        else:
+            return await self._execute_normal(ctx, code, timeout)
+
+    async def _execute_sandboxed(self, code: str, timeout: float) -> ToolResult:
+        """Execute code in a sandbox with resource limits."""
+        from agentic_learn.core.sandbox import Sandbox, SandboxConfig
+
+        config = SandboxConfig(
+            max_wall_time=int(timeout),
+            max_memory_mb=512,
+            network_enabled=False,
+        )
+
+        sandbox = Sandbox.create(config)
+        try:
+            result = await sandbox.run_python(code, timeout=timeout)
+
+            return ToolResult(
+                tool_call_id="",
+                content=result.output,
+                is_error=not result.success,
+                metadata={
+                    "sandboxed": True,
+                    "exit_code": result.exit_code,
+                    "timed_out": result.timed_out,
+                    "memory_exceeded": result.memory_exceeded,
+                },
+            )
+        finally:
+            await sandbox.cleanup()
+
+    async def _execute_normal(
+        self,
+        ctx: ToolContext,
+        code: str,
+        timeout: float,
+    ) -> ToolResult:
+        """Execute code in the normal (non-sandboxed) mode."""
         stdout_capture = io.StringIO()
         stderr_capture = io.StringIO()
 
@@ -221,6 +289,7 @@ except ImportError:
             content="\n\n".join(output_parts),
             is_error=error_occurred,
             metadata={
+                "sandboxed": False,
                 "has_stdout": bool(stdout_output),
                 "has_stderr": bool(stderr_output),
                 "has_result": result_value is not None,
