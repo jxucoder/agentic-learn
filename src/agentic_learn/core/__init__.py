@@ -11,8 +11,8 @@ from agentic_learn.core.types import (
     AgentEvent,
     EventType,
 )
-from agentic_learn.core.tool import Tool, tool
-from agentic_learn.core.extension import Extension, ExtensionContext
+from agentic_learn.core.tool import Tool, ToolContext, tool
+from agentic_learn.core.extension import Extension, ExtensionAPI, ExtensionContext
 from agentic_learn.core.session import SessionManager, SessionMetadata
 from agentic_learn.core.sandbox import (
     Sandbox,
@@ -33,8 +33,10 @@ __all__ = [
     "AgentEvent",
     "EventType",
     "Tool",
+    "ToolContext",
     "tool",
     "Extension",
+    "ExtensionAPI",
     "ExtensionContext",
     "SessionManager",
     "SessionMetadata",
