@@ -1,0 +1,56 @@
+# MLE-bench agent registry configuration for agentic-learn
+
+vars:
+  time_limit: &time_limit 86400  # 24 hours
+
+defaults: &defaults
+  start: agentic-learn/start.sh
+  dockerfile: agentic-learn/Dockerfile
+  kwargs_type: argparse
+  env_vars: &env_vars
+    TIME_LIMIT_SECS: *time_limit
+
+agentic-learn:
+  <<: *defaults
+  kwargs:
+    provider: anthropic
+    model: claude-sonnet-4-20250514
+    max-steps: 500
+    step-timeout: 32400  # 9 hours per step
+  env_vars:
+    <<: *env_vars
+    ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
+agentic-learn/openai:
+  <<: *defaults
+  kwargs:
+    provider: openai
+    model: o3
+    max-steps: 500
+    step-timeout: 32400
+  env_vars:
+    <<: *env_vars
+    OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+
+agentic-learn/deepseek:
+  <<: *defaults
+  kwargs:
+    provider: openai
+    model: deepseek-reasoner
+    max-steps: 500
+    step-timeout: 32400
+    base-url: https://api.deepseek.com
+  env_vars:
+    <<: *env_vars
+    OPENAI_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+
+agentic-learn/dev:
+  <<: *defaults
+  kwargs:
+    provider: anthropic
+    model: claude-sonnet-4-20250514
+    max-steps: 10
+    step-timeout: 600
+  env_vars:
+    <<: *env_vars
+    ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
