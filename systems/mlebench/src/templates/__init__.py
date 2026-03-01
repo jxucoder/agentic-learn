@@ -1,1 +1,0 @@
-"""Competition-type code templates."""
