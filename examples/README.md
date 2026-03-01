@@ -1,10 +1,40 @@
 # Benchmarks
 
-Two scikit-learn tasks that exercise the agent on the problems
-that matter: mixed types, missing values, feature engineering,
-and model selection.
+## ⚠️ Synthetic benchmarks (recommended)
 
-## Titanic — binary classification
+Public datasets like Titanic and California Housing are present in LLM
+training data. When using frontier models (GPT-4, o3, Codex, etc.), any
+score improvement could reflect **memorized solutions** rather than
+genuine feature engineering. Use synthetic benchmarks for honest evaluation.
+
+```bash
+# Binary classification — fresh data each seed
+python examples/synth_classification.py
+python examples/synth_classification.py --seed 123 --steps 10
+
+# Regression
+python examples/synth_regression.py
+python examples/synth_regression.py --seed 456 --noise 0.3
+```
+
+The synthetic generator (`aglearn.synth`) creates datasets with:
+- **Known ground truth** — non-linear interactions the agent must discover
+- **Noise features** — two columns that should be ignored
+- **Missing values** — configurable fraction of NaNs
+- **Unique per seed** — the LLM has never seen the data
+
+See `synth_classification.py` and `synth_regression.py` for full options
+(`--seed`, `--steps`, `--samples`, `--noise`).
+
+---
+
+## Legacy benchmarks (public data — may have knowledge leakage)
+
+These benchmarks use well-known public datasets. They are useful for
+quick smoke tests and comparison with published results, but **scores
+may be inflated** due to data contamination in modern LLMs.
+
+### Titanic — binary classification
 
 ```bash
 python examples/titanic.py
@@ -16,11 +46,7 @@ python examples/titanic.py
 | ~20% missing ages, ~77% missing cabin | Baseline (logistic regression): ~0.77 F1 |
 | Feature engineering: title, family size, deck | Good: ~0.82+ F1 |
 
-The agent should discover that extracting titles from names,
-engineering family-size features, and using tree-based models
-outperforms a vanilla classifier.
-
-## California Housing — regression
+### California Housing — regression
 
 ```bash
 python examples/california_housing.py
@@ -32,16 +58,15 @@ python examples/california_housing.py
 | Feature interactions (income × location) | Baseline (ridge regression): ~0.60 R² |
 | Ratio features: bedrooms/rooms, pop/households | Good: ~0.85+ R² |
 
-The agent should discover that gradient boosting with location-aware
-features dramatically outperforms linear models on this dataset.
+---
 
 ## Running
 
-Each benchmark downloads its dataset on first run (cached in `data/`),
-then runs 10 agent steps. Results go to `output/<benchmark>/`.
+Each benchmark downloads/generates its dataset on first run (cached in
+`data/`), then runs 10 agent steps. Results go to `output/<benchmark>/`.
 
 ```
-output/titanic/
+output/<benchmark>/
     journal.jsonl         full experiment history
     best_solution.py      highest-scoring script
     step_000/             agent working directory for step 0
@@ -51,5 +76,5 @@ output/titanic/
 Set `MLE_MODEL` to use a different model:
 
 ```bash
-MLE_MODEL=o3 python examples/titanic.py
+MLE_MODEL=codex-mini python examples/titanic.py
 ```
