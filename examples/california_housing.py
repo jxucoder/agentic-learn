@@ -22,7 +22,7 @@ import sys
 
 from sklearn.datasets import fetch_california_housing
 
-from agentic_learn import TaskConfig, evolve
+from aglearn import TaskConfig, evolve
 
 logging.basicConfig(
     level=logging.INFO,

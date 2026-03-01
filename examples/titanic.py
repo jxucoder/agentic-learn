@@ -20,7 +20,7 @@ import sys
 
 from sklearn.datasets import fetch_openml
 
-from agentic_learn import TaskConfig, evolve
+from aglearn import TaskConfig, evolve
 
 logging.basicConfig(
     level=logging.INFO,
