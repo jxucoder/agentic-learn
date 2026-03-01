@@ -75,7 +75,7 @@ task = TaskConfig(
     metric="f1_score",
 )
 
-best = evolve(task, model="o4-mini", max_steps=10)
+best = evolve(task, model="codex-mini", max_steps=10)
 print(best.metric_value)
 ```
 
@@ -87,7 +87,7 @@ The best solution is saved to `./output/best_solution.py`. Full history lives in
 
 | Parameter | Default | Description |
 |---|---|---|
-| `model` | `o4-mini` | Model passed to `codex exec -m` |
+| `model` | `codex-mini` | Model passed to `codex exec -m` |
 | `max_steps` | `10` | Number of agent invocations |
 | `timeout` | `300` | Seconds before an agent run is killed |
 | `output_dir` | `./output` | Where journal and step dirs are written |
