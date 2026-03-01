@@ -97,6 +97,29 @@ The best solution is saved to `./output/best_solution.py`. Full history lives in
 
 ## Benchmarks
 
+### ⚠️ Synthetic benchmarks (recommended)
+
+Public datasets like Titanic and California Housing are in LLM training data — any "improvement" could be memorization, not genuine learning. Use synthetic benchmarks for honest evaluation.
+
+| Task | Metric | Run | Notes |
+|---|---|---|---|
+| Synthetic classification | F1 | `python examples/synth_classification.py` | Fresh data per seed, non-linear interactions |
+| Synthetic regression | R² | `python examples/synth_regression.py` | Same generator, continuous target |
+
+```bash
+# Use --seed to generate a completely new dataset each run
+python examples/synth_classification.py --seed 123 --steps 10
+python examples/synth_regression.py --seed 456 --noise 0.3
+```
+
+The synthetic generator creates datasets with:
+- **Known ground truth**: income × education interaction, quadratic age effect, commute ratio, satisfaction threshold
+- **Noise features**: two columns that should be ignored by a good model
+- **Missing values**: configurable fraction of NaNs
+- **Metadata**: `synth_*_meta.json` records the ground truth for verification
+
+### Legacy benchmarks (public data — may have leakage)
+
 | Task | Metric | Baseline | After 10 steps | Run |
 |---|---|---|---|---|
 | Titanic (binary clf) | F1 | ~0.62 | ~0.82+ | `python examples/titanic.py` |
@@ -111,11 +134,14 @@ src/aglearn/
 ├── __init__.py      # Exports: TaskConfig, evolve, Journal, Experiment
 ├── journal.py       # Experiment dataclass + append-only Journal
 ├── agent.py         # Codex exec wrapper
-└── loop.py          # Briefing builder + evolve loop
+├── loop.py          # Briefing builder + evolve loop
+└── synth.py         # Synthetic dataset generator (leak-free benchmarks)
 
 examples/
-├── titanic.py                # Binary classification benchmark
-└── california_housing.py     # Regression benchmark
+├── synth_classification.py   # Synthetic binary classification (recommended)
+├── synth_regression.py       # Synthetic regression (recommended)
+├── titanic.py                # Titanic (public data — legacy)
+└── california_housing.py     # California Housing (public data — legacy)
 ```
 
 ---
