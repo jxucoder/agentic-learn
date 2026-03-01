@@ -52,6 +52,7 @@ def evolve(
         exp = Experiment(
             code=result["code"],
             hypothesis=result["hypothesis"],
+            exploration=result.get("exploration", ""),
             metric_value=result["metric_value"],
             is_buggy=result["is_buggy"],
         )
@@ -88,10 +89,16 @@ def _briefing(task: TaskConfig, journal: Journal) -> str:
 
     parts.append(
         "Do the following:\n"
-        "1. Explore the data, then write a scikit-learn solution as solution.py\n"
-        '2. Run solution.py — it must print {"metric": <float>} as its only stdout line\n'
-        '3. Save {"metric": <float>} to result.json\n'
-        "4. Try something meaningfully different from what's in the journal"
+        "1. Explore the data — look at distributions, correlations, missing values\n"
+        "2. Write a scikit-learn solution as solution.py\n"
+        '3. Run solution.py — it must print {"metric": <float>} as its only stdout line\n'
+        '4. Save {"metric": <float>} to result.json\n'
+        "5. Try something meaningfully different from what's in the journal\n"
+        "6. Write exploration.md documenting:\n"
+        "   - Key patterns and distributions you found in the data\n"
+        "   - Feature engineering decisions and why (what signal did you see?)\n"
+        "   - Model choice rationale\n"
+        "   - What you tried that didn't work and why"
     )
 
     return "\n\n".join(parts)

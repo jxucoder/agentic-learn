@@ -49,6 +49,7 @@ def run(
     code = _read(os.path.join(work_dir, "solution.py"))
     result_data = _read_json(os.path.join(work_dir, "result.json"))
     hypothesis = _read(response_path).strip()
+    exploration = _read(os.path.join(work_dir, "exploration.md")).strip()
 
     metric = None
     if result_data:
@@ -57,6 +58,7 @@ def run(
     return {
         "code": code,
         "hypothesis": hypothesis or "",
+        "exploration": exploration,
         "metric_value": float(metric) if metric is not None else None,
         "is_buggy": metric is None,
     }

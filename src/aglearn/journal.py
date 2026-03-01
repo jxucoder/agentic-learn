@@ -17,6 +17,7 @@ class Experiment:
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
     code: str = ""
     hypothesis: str = ""
+    exploration: str = ""  # reasoning traces from exploration.md
     metric_value: float | None = None
     is_buggy: bool = False
     stdout: str = ""
