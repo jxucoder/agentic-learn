@@ -1,5 +1,5 @@
 [project]
-name = "aglearn"
+name = "agentic-learn"
 version = "0.1.0"
 description = "Self-evolving MLE agent framework"
 requires-python = ">=3.11"

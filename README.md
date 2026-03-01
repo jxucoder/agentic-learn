@@ -1,8 +1,8 @@
-# 🧬 aglearn
+# 🧬 agentic-learn
 
 A self-evolving ML agent that iteratively writes, runs, and improves scikit-learn solutions for tabular data tasks.
 
-> `pip install aglearn` → `from aglearn import evolve`
+> `pip install agentic-learn` → `from aglearn import evolve`
 
 ---
 
