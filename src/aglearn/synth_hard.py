@@ -50,17 +50,28 @@ def generate_multiclass(task: HardSyntheticTask, output_dir: str = "data") -> st
     team_size = rng.integers(1, 50, size=n).astype(float)
 
     department = rng.choice(
-        ["engineering", "sales", "marketing", "support", "research",
-         "hr", "finance", "operations"],
-        size=n, p=[0.25, 0.15, 0.12, 0.15, 0.10, 0.08, 0.08, 0.07],
+        [
+            "engineering",
+            "sales",
+            "marketing",
+            "support",
+            "research",
+            "hr",
+            "finance",
+            "operations",
+        ],
+        size=n,
+        p=[0.25, 0.15, 0.12, 0.15, 0.10, 0.08, 0.08, 0.07],
     )
     seniority = rng.choice(
         ["junior", "mid", "senior", "lead", "director"],
-        size=n, p=[0.30, 0.30, 0.20, 0.12, 0.08],
+        size=n,
+        p=[0.30, 0.30, 0.20, 0.12, 0.08],
     )
     location = rng.choice(
         ["urban", "suburban", "rural", "remote"],
-        size=n, p=[0.40, 0.30, 0.15, 0.15],
+        size=n,
+        p=[0.40, 0.30, 0.15, 0.15],
     )
 
     performance_score = rng.beta(a=5, b=2, size=n) * 10  # 0-10, right-skewed
@@ -75,22 +86,37 @@ def generate_multiclass(task: HardSyntheticTask, output_dir: str = "data") -> st
 
     # ── Ground truth: complex multi-class signal ──────────────────
     dept_code = np.select(
-        [department == "engineering", department == "research",
-         department == "sales", department == "marketing",
-         department == "finance", department == "hr",
-         department == "support", department == "operations"],
+        [
+            department == "engineering",
+            department == "research",
+            department == "sales",
+            department == "marketing",
+            department == "finance",
+            department == "hr",
+            department == "support",
+            department == "operations",
+        ],
         [1.5, 1.3, 0.8, 0.6, 1.0, 0.4, 0.3, 0.5],
         default=0.5,
     )
     seniority_code = np.select(
-        [seniority == "director", seniority == "lead",
-         seniority == "senior", seniority == "mid", seniority == "junior"],
+        [
+            seniority == "director",
+            seniority == "lead",
+            seniority == "senior",
+            seniority == "mid",
+            seniority == "junior",
+        ],
         [2.0, 1.5, 1.0, 0.5, 0.0],
         default=0.5,
     )
     location_code = np.select(
-        [location == "urban", location == "suburban",
-         location == "rural", location == "remote"],
+        [
+            location == "urban",
+            location == "suburban",
+            location == "rural",
+            location == "remote",
+        ],
         [0.3, 0.0, -0.2, 0.1],
         default=0.0,
     )
@@ -133,24 +159,26 @@ def generate_multiclass(task: HardSyntheticTask, output_dir: str = "data") -> st
     y = np.digitize(signal, class_boundaries)  # classes 0-4
 
     # ── Assemble DataFrame ────────────────────────────────────────
-    df = pd.DataFrame({
-        "salary": np.round(salary, 2),
-        "experience_years": np.round(experience_years, 1),
-        "weekly_hours": np.round(weekly_hours, 1),
-        "project_count": project_count,
-        "team_size": team_size.astype(int),
-        "department": department,
-        "seniority": seniority,
-        "location": location,
-        "performance_score": np.round(performance_score, 2),
-        "commute_minutes": np.round(commute_minutes, 1),
-        "noise_salary_corr": np.round(noise_salary_echo, 2),
-        "noise_hours_corr": np.round(noise_hours_echo, 1),
-        "noise_random_a": np.round(noise_random_a, 3),
-        "noise_random_b": np.round(noise_random_b, 2),
-        "noise_random_c": noise_random_c.astype(int),
-        "target": y,
-    })
+    df = pd.DataFrame(
+        {
+            "salary": np.round(salary, 2),
+            "experience_years": np.round(experience_years, 1),
+            "weekly_hours": np.round(weekly_hours, 1),
+            "project_count": project_count,
+            "team_size": team_size.astype(int),
+            "department": department,
+            "seniority": seniority,
+            "location": location,
+            "performance_score": np.round(performance_score, 2),
+            "commute_minutes": np.round(commute_minutes, 1),
+            "noise_salary_corr": np.round(noise_salary_echo, 2),
+            "noise_hours_corr": np.round(noise_hours_echo, 1),
+            "noise_random_a": np.round(noise_random_a, 3),
+            "noise_random_b": np.round(noise_random_b, 2),
+            "noise_random_c": noise_random_c.astype(int),
+            "target": y,
+        }
+    )
 
     # ── Non-random missing values (MNAR: high values more likely missing) ──
     if task.missing_frac > 0:
@@ -183,13 +211,23 @@ def generate_multiclass(task: HardSyntheticTask, output_dir: str = "data") -> st
         "missing_pattern": "MNAR for salary/performance/commute; MCAR for others",
         "seed": task.seed,
         "informative_features": [
-            "salary", "experience_years", "weekly_hours", "project_count",
-            "team_size", "department", "seniority", "location",
-            "performance_score", "commute_minutes",
+            "salary",
+            "experience_years",
+            "weekly_hours",
+            "project_count",
+            "team_size",
+            "department",
+            "seniority",
+            "location",
+            "performance_score",
+            "commute_minutes",
         ],
         "noise_features": [
-            "noise_salary_corr", "noise_hours_corr",
-            "noise_random_a", "noise_random_b", "noise_random_c",
+            "noise_salary_corr",
+            "noise_hours_corr",
+            "noise_random_a",
+            "noise_random_b",
+            "noise_random_c",
         ],
         "interactions": [
             "salary × seniority × department (3-way multiplicative)",
@@ -206,7 +244,9 @@ def generate_multiclass(task: HardSyntheticTask, output_dir: str = "data") -> st
     return os.path.abspath(path)
 
 
-def generate_temporal_regression(task: HardSyntheticTask, output_dir: str = "data") -> str:
+def generate_temporal_regression(
+    task: HardSyntheticTask, output_dir: str = "data"
+) -> str:
     """Generate a regression dataset with temporal structure and outliers.
 
     Challenges:
@@ -297,32 +337,39 @@ def generate_temporal_regression(task: HardSyntheticTask, output_dir: str = "dat
     y[outlier_mask] *= rng.choice([-1, 3, 5], size=outlier_mask.sum())
 
     # ── Assemble DataFrame ────────────────────────────────────────
-    df = pd.DataFrame({
-        "day_index": day_index,
-        "day_of_week": day_of_week,
-        "month": month,
-        "store_id": store_id,
-        "temperature": np.round(temperature, 1),
-        "price": np.round(price, 2),
-        "promotion": promotion.astype(int),
-        "competitor_price": np.round(competitor_price, 2),
-        "foot_traffic": foot_traffic.astype(int),
-        "online_reviews": np.round(online_reviews, 2),
-        "ad_spend": np.round(ad_spend, 2),
-        "inventory_level": inventory_level.astype(int),
-        "noise_trend": np.round(noise_ts_a, 3),
-        "noise_random": np.round(noise_ts_b, 3),
-        "noise_category": noise_cat,
-        "noise_uniform": np.round(noise_uniform, 2),
-        "noise_seasonal": np.round(noise_seasonal, 3),
-        "target": np.round(y, 4),
-    })
+    df = pd.DataFrame(
+        {
+            "day_index": day_index,
+            "day_of_week": day_of_week,
+            "month": month,
+            "store_id": store_id,
+            "temperature": np.round(temperature, 1),
+            "price": np.round(price, 2),
+            "promotion": promotion.astype(int),
+            "competitor_price": np.round(competitor_price, 2),
+            "foot_traffic": foot_traffic.astype(int),
+            "online_reviews": np.round(online_reviews, 2),
+            "ad_spend": np.round(ad_spend, 2),
+            "inventory_level": inventory_level.astype(int),
+            "noise_trend": np.round(noise_ts_a, 3),
+            "noise_random": np.round(noise_ts_b, 3),
+            "noise_category": noise_cat,
+            "noise_uniform": np.round(noise_uniform, 2),
+            "noise_seasonal": np.round(noise_seasonal, 3),
+            "target": np.round(y, 4),
+        }
+    )
 
     # ── Missing values ────────────────────────────────────────────
     if task.missing_frac > 0:
         cols_to_corrupt = [
-            "temperature", "price", "competitor_price",
-            "foot_traffic", "online_reviews", "ad_spend", "inventory_level",
+            "temperature",
+            "price",
+            "competitor_price",
+            "foot_traffic",
+            "online_reviews",
+            "ad_spend",
+            "inventory_level",
         ]
         for col in cols_to_corrupt:
             mask = rng.random(n) < task.missing_frac
@@ -344,13 +391,25 @@ def generate_temporal_regression(task: HardSyntheticTask, output_dir: str = "dat
         "n_stores": n_stores,
         "outlier_frac": 0.05,
         "informative_features": [
-            "day_index", "day_of_week", "month", "store_id",
-            "temperature", "price", "promotion", "competitor_price",
-            "foot_traffic", "online_reviews", "ad_spend", "inventory_level",
+            "day_index",
+            "day_of_week",
+            "month",
+            "store_id",
+            "temperature",
+            "price",
+            "promotion",
+            "competitor_price",
+            "foot_traffic",
+            "online_reviews",
+            "ad_spend",
+            "inventory_level",
         ],
         "noise_features": [
-            "noise_trend", "noise_random", "noise_category",
-            "noise_uniform", "noise_seasonal",
+            "noise_trend",
+            "noise_random",
+            "noise_category",
+            "noise_uniform",
+            "noise_seasonal",
         ],
         "interactions": [
             "trend + weekend + monthly seasonality (temporal decomposition)",
@@ -399,7 +458,7 @@ def generate_high_dim(task: HardSyntheticTask, output_dir: str = "data") -> str:
     xor_signal = np.sign(x1) * np.sign(x2)  # XOR-like
 
     # Polynomial interaction: x3 and x4
-    poly_signal = 0.1 * x3 * x4 - 0.05 * x4 ** 2
+    poly_signal = 0.1 * x3 * x4 - 0.05 * x4**2
 
     # Threshold interaction: x5 modulates x6
     threshold_signal = np.where(x5 > 0, np.log1p(x6), -np.sqrt(x6.clip(0)))
@@ -423,8 +482,14 @@ def generate_high_dim(task: HardSyntheticTask, output_dir: str = "data") -> str:
 
     # Informative features (with obfuscated names)
     informative = {
-        "feat_03": x1, "feat_17": x2, "feat_22": x3, "feat_08": x4,
-        "feat_31": x5, "feat_45": x6, "feat_12": x7, "feat_39": x8,
+        "feat_03": x1,
+        "feat_17": x2,
+        "feat_22": x3,
+        "feat_08": x4,
+        "feat_31": x5,
+        "feat_45": x6,
+        "feat_12": x7,
+        "feat_39": x8,
     }
     features.update({k: np.round(v, 4) for k, v in informative.items()})
 
@@ -450,12 +515,16 @@ def generate_high_dim(task: HardSyntheticTask, output_dir: str = "data") -> str:
             idx += 1
         dist = rng.choice(["normal", "uniform", "exponential", "integers"])
         if dist == "normal":
-            features[f"feat_{idx:02d}"] = np.round(rng.normal(0, rng.uniform(0.5, 5), size=n), 4)
+            features[f"feat_{idx:02d}"] = np.round(
+                rng.normal(0, rng.uniform(0.5, 5), size=n), 4
+            )
         elif dist == "uniform":
             lo, hi = sorted(rng.uniform(-10, 10, size=2))
             features[f"feat_{idx:02d}"] = np.round(rng.uniform(lo, hi, size=n), 4)
         elif dist == "exponential":
-            features[f"feat_{idx:02d}"] = np.round(rng.exponential(rng.uniform(0.5, 5), size=n), 4)
+            features[f"feat_{idx:02d}"] = np.round(
+                rng.exponential(rng.uniform(0.5, 5), size=n), 4
+            )
         else:
             features[f"feat_{idx:02d}"] = rng.integers(0, rng.integers(2, 50), size=n)
 
@@ -481,7 +550,10 @@ def generate_high_dim(task: HardSyntheticTask, output_dir: str = "data") -> str:
     redundant_names = ["feat_04", "feat_18", "feat_40"]
     multicollinear_names = ["feat_25", "feat_26", "feat_27", "feat_28", "feat_29"]
     noise_names = sorted(
-        set(features.keys()) - set(informative_names) - set(redundant_names) - set(multicollinear_names)
+        set(features.keys())
+        - set(informative_names)
+        - set(redundant_names)
+        - set(multicollinear_names)
     )
 
     meta = {

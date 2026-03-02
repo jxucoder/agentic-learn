@@ -72,7 +72,11 @@ class Journal:
 
     def _good(self) -> list[Experiment]:
         return sorted(
-            [e for e in self._experiments if not e.is_buggy and e.metric_value is not None],
+            [
+                e
+                for e in self._experiments
+                if not e.is_buggy and e.metric_value is not None
+            ],
             key=lambda e: e.metric_value,
             reverse=True,
         )

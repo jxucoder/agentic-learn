@@ -50,8 +50,11 @@ def generate(task: SyntheticTask, output_dir: str = "data") -> str:
     distance_km = rng.exponential(scale=15, size=n)
 
     regions = rng.choice(["north", "south", "east", "west", "central"], size=n)
-    education = rng.choice(["high_school", "bachelors", "masters", "phd"], size=n,
-                           p=[0.35, 0.35, 0.20, 0.10])
+    education = rng.choice(
+        ["high_school", "bachelors", "masters", "phd"],
+        size=n,
+        p=[0.35, 0.35, 0.20, 0.10],
+    )
 
     satisfaction = rng.integers(1, 6, size=n)  # 1-5 scale
 
@@ -61,15 +64,20 @@ def generate(task: SyntheticTask, output_dir: str = "data") -> str:
 
     # ── Ground truth function ────────────────────────────────────
     edu_multiplier = np.where(
-        education == "phd", 1.5,
-        np.where(education == "masters", 1.2,
-                 np.where(education == "bachelors", 1.0, 0.7))
+        education == "phd",
+        1.5,
+        np.where(
+            education == "masters", 1.2, np.where(education == "bachelors", 1.0, 0.7)
+        ),
     )
     region_offset = np.where(
-        regions == "central", 0.3,
-        np.where(regions == "north", 0.1,
-                 np.where(regions == "south", -0.1,
-                          np.where(regions == "east", 0.0, -0.2)))
+        regions == "central",
+        0.3,
+        np.where(
+            regions == "north",
+            0.1,
+            np.where(regions == "south", -0.1, np.where(regions == "east", 0.0, -0.2)),
+        ),
     )
     age_effect = -0.002 * (age - 45) ** 2 + 1.0
     commute_ratio = np.log1p(hours_worked) / np.log1p(distance_km + 1)
@@ -95,22 +103,30 @@ def generate(task: SyntheticTask, output_dir: str = "data") -> str:
     target_col = "target"
 
     # ── Assemble DataFrame ───────────────────────────────────────
-    df = pd.DataFrame({
-        "income": np.round(income, 2),
-        "age": np.round(age, 1),
-        "hours_worked": np.round(hours_worked, 1),
-        "distance_km": np.round(distance_km, 2),
-        "region": regions,
-        "education": education,
-        "satisfaction": satisfaction,
-        "noise_feature_a": np.round(noise_a, 3),
-        "noise_feature_b": noise_b,
-        target_col: y if task.task_type == "classification" else np.round(y, 4),
-    })
+    df = pd.DataFrame(
+        {
+            "income": np.round(income, 2),
+            "age": np.round(age, 1),
+            "hours_worked": np.round(hours_worked, 1),
+            "distance_km": np.round(distance_km, 2),
+            "region": regions,
+            "education": education,
+            "satisfaction": satisfaction,
+            "noise_feature_a": np.round(noise_a, 3),
+            "noise_feature_b": noise_b,
+            target_col: y if task.task_type == "classification" else np.round(y, 4),
+        }
+    )
 
     # ── Inject missing values ────────────────────────────────────
     if task.missing_frac > 0:
-        cols_to_corrupt = ["income", "age", "hours_worked", "distance_km", "satisfaction"]
+        cols_to_corrupt = [
+            "income",
+            "age",
+            "hours_worked",
+            "distance_km",
+            "satisfaction",
+        ]
         for col in cols_to_corrupt:
             mask = rng.random(n) < task.missing_frac
             df.loc[mask, col] = np.nan
@@ -129,8 +145,13 @@ def generate(task: SyntheticTask, output_dir: str = "data") -> str:
         "missing_frac": task.missing_frac,
         "seed": task.seed,
         "informative_features": [
-            "income", "age", "hours_worked", "distance_km",
-            "region", "education", "satisfaction",
+            "income",
+            "age",
+            "hours_worked",
+            "distance_km",
+            "region",
+            "education",
+            "satisfaction",
         ],
         "noise_features": ["noise_feature_a", "noise_feature_b"],
         "interactions": [

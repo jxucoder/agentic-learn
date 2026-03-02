@@ -29,8 +29,12 @@ def main() -> None:
     args = parser.parse_args()
 
     synth = SyntheticTask(
-        name="reg", task_type="regression", metric="r2",
-        n_samples=args.samples, noise_level=args.noise, seed=args.seed,
+        name="reg",
+        task_type="regression",
+        metric="r2",
+        n_samples=args.samples,
+        noise_level=args.noise,
+        seed=args.seed,
     )
     data_path = generate(synth, output_dir="data")
     print(f"Generated synthetic dataset: {data_path}")

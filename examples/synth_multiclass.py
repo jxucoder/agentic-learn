@@ -28,7 +28,9 @@ logging.basicConfig(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Synthetic multi-class benchmark (hard)")
+    parser = argparse.ArgumentParser(
+        description="Synthetic multi-class benchmark (hard)"
+    )
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--steps", type=int, default=15)
     parser.add_argument("--samples", type=int, default=4000)
@@ -36,8 +38,12 @@ def main() -> None:
     args = parser.parse_args()
 
     synth = HardSyntheticTask(
-        name="multiclass", task_type="multiclass", metric="f1_macro",
-        n_samples=args.samples, noise_level=args.noise, seed=args.seed,
+        name="multiclass",
+        task_type="multiclass",
+        metric="f1_macro",
+        n_samples=args.samples,
+        noise_level=args.noise,
+        seed=args.seed,
     )
     data_path = generate_multiclass(synth, output_dir="data")
     print(f"Generated synthetic dataset: {data_path}")

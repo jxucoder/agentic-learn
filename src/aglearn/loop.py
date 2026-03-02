@@ -41,7 +41,9 @@ def evolve(
     os.makedirs(output_dir, exist_ok=True)
     journal = Journal(os.path.join(output_dir, "journal.jsonl"))
 
-    log.info("evolve | task=%s model=%s steps=%d", task.description[:60], model, max_steps)
+    log.info(
+        "evolve | task=%s model=%s steps=%d", task.description[:60], model, max_steps
+    )
 
     for step in range(max_steps):
         log.info("step %d/%d", step + 1, max_steps)
@@ -94,9 +96,7 @@ def _briefing(task: TaskConfig, journal: Journal) -> str:
     if task.instructions:
         parts.append(f"Additional instructions: {task.instructions}")
 
-    parts.append(
-        f"What has been tried so far (best first):\n{journal.summary()}"
-    )
+    parts.append(f"What has been tried so far (best first):\n{journal.summary()}")
 
     parts.append(
         "Do the following:\n"
@@ -154,7 +154,8 @@ def _generate_report(
 
 def _report_briefing(task: TaskConfig, journal: Journal, output_dir: str) -> str:
     step_dirs = sorted(
-        d for d in os.listdir(output_dir)
+        d
+        for d in os.listdir(output_dir)
         if d.startswith("step_") and os.path.isdir(os.path.join(output_dir, d))
     )
 
@@ -166,21 +167,17 @@ def _report_briefing(task: TaskConfig, journal: Journal, output_dir: str) -> str
 
     parts = [
         "You are a research analyst writing a report on an ML experiment run.",
-
         f"Task that was optimized:\n"
         f"  {task.description}\n"
         f"  Data: {task.data_path}\n"
         f"  Target: {task.target_column}\n"
         f"  Metric: {task.metric} (higher is better)",
-
         f"Experiment journal (all experiments, best first):\n{journal.summary()}",
-
         "Artifact locations — read these files to write your analysis:\n"
         f"  Journal: {os.path.join(output_dir, 'journal.jsonl')}\n"
         f"  Best solution: {os.path.join(output_dir, 'best_solution.py')}\n"
         "  Step directories (each has solution.py, result.json, exploration.md, trace.jsonl):\n"
         + "\n".join(step_listing),
-
         "Write report.md — a detailed research report covering:\n"
         "\n"
         "1. **Summary** — task description, number of steps, metric trajectory,\n"
@@ -226,17 +223,28 @@ def _convert_to_pdf(md_path: str) -> None:
     pdf_path = md_path.replace(".md", ".pdf")
     try:
         subprocess.run(
-            ["pandoc", md_path, "-o", pdf_path,
-             "--pdf-engine=xelatex",
-             "-V", "geometry:margin=1in",
-             "-V", "fontsize=11pt"],
+            [
+                "pandoc",
+                md_path,
+                "-o",
+                pdf_path,
+                "--pdf-engine=xelatex",
+                "-V",
+                "geometry:margin=1in",
+                "-V",
+                "fontsize=11pt",
+            ],
             capture_output=True,
             text=True,
             timeout=60,
             check=True,
         )
         log.info("report | wrote %s", pdf_path)
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError) as e:
+    except (
+        subprocess.CalledProcessError,
+        subprocess.TimeoutExpired,
+        FileNotFoundError,
+    ) as e:
         log.warning("report | PDF conversion failed: %s", e)
 
 

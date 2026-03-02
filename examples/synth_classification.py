@@ -29,8 +29,12 @@ def main() -> None:
     args = parser.parse_args()
 
     synth = SyntheticTask(
-        name="clf", task_type="classification", metric="f1",
-        n_samples=args.samples, noise_level=args.noise, seed=args.seed,
+        name="clf",
+        task_type="classification",
+        metric="f1",
+        n_samples=args.samples,
+        noise_level=args.noise,
+        seed=args.seed,
     )
     data_path = generate(synth, output_dir="data")
     print(f"Generated synthetic dataset: {data_path}")

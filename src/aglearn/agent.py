@@ -28,13 +28,16 @@ def run(
     trace_path = os.path.join(work_dir, "trace.jsonl")
 
     cmd = [
-        "codex", "exec",
+        "codex",
+        "exec",
         "--full-auto",
         "--ephemeral",
         "--skip-git-repo-check",
         "--json",
-        "-C", work_dir,
-        "-o", response_path,
+        "-C",
+        work_dir,
+        "-o",
+        response_path,
     ]
     if model:
         cmd.extend(["-m", model])

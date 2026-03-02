@@ -28,7 +28,9 @@ logging.basicConfig(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Synthetic temporal regression benchmark (hard)")
+    parser = argparse.ArgumentParser(
+        description="Synthetic temporal regression benchmark (hard)"
+    )
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--steps", type=int, default=15)
     parser.add_argument("--samples", type=int, default=4000)
@@ -36,8 +38,12 @@ def main() -> None:
     args = parser.parse_args()
 
     synth = HardSyntheticTask(
-        name="temporal_reg", task_type="temporal_regression", metric="r2",
-        n_samples=args.samples, noise_level=args.noise, seed=args.seed,
+        name="temporal_reg",
+        task_type="temporal_regression",
+        metric="r2",
+        n_samples=args.samples,
+        noise_level=args.noise,
+        seed=args.seed,
     )
     data_path = generate_temporal_regression(synth, output_dir="data")
     print(f"Generated synthetic dataset: {data_path}")

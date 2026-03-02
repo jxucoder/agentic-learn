@@ -38,7 +38,9 @@ def prepare_data() -> str:
         housing = fetch_california_housing(as_frame=True)
         df = housing.frame  # type: ignore[union-attr]
         df.to_csv(path, index=False)
-        print(f"Prepared California Housing dataset: {df.shape[0]} rows, {df.shape[1]} columns")
+        print(
+            f"Prepared California Housing dataset: {df.shape[0]} rows, {df.shape[1]} columns"
+        )
     return os.path.abspath(path)
 
 
