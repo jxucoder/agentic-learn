@@ -19,15 +19,20 @@ def run(
     The agent works inside *work_dir*: it explores data, writes
     ``solution.py``, runs it, and writes ``result.json``.
 
+    The full session trace (thinking, commands, outputs) is saved
+    to ``trace.jsonl`` for research reproducibility.
+
     Returns dict with keys: code, hypothesis, metric_value, is_buggy.
     """
     response_path = os.path.join(work_dir, ".agent_response.md")
+    trace_path = os.path.join(work_dir, "trace.jsonl")
 
     cmd = [
         "codex", "exec",
         "--full-auto",
         "--ephemeral",
         "--skip-git-repo-check",
+        "--json",
         "-C", work_dir,
         "-o", response_path,
     ]
@@ -36,15 +41,21 @@ def run(
     cmd.append("-")  # read prompt from stdin
 
     try:
-        subprocess.run(
+        proc = subprocess.run(
             cmd,
             input=prompt,
             capture_output=True,
             text=True,
             timeout=timeout,
         )
-    except subprocess.TimeoutExpired:
-        pass  # still check for partial output the agent may have written
+        # Save full session trace
+        if proc.stdout:
+            with open(trace_path, "w") as f:
+                f.write(proc.stdout)
+    except subprocess.TimeoutExpired as e:
+        if e.stdout:
+            with open(trace_path, "w") as f:
+                f.write(e.stdout if isinstance(e.stdout, str) else e.stdout.decode())
 
     code = _read(os.path.join(work_dir, "solution.py"))
     result_data = _read_json(os.path.join(work_dir, "result.json"))

@@ -12,10 +12,10 @@ Give a coding agent a task and a journal of past experiments. Each step, it read
 
 ```mermaid
 flowchart TD
-    J["📓 Experiment Journal\n(sorted by best score)"]
-    B["📋 Briefing\ntask description + journal → prompt"]
-    A["🤖 Coding Agent\nreads data · writes code · runs it\ndebugs errors · reports metric"]
-    R["💾 Record\nappend result → journal.jsonl"]
+    J["📓 Experiment Journal<br/>(sorted by best score)"]
+    B["📋 Briefing<br/>task description + journal → prompt"]
+    A["🤖 Coding Agent<br/>reads data · writes code · runs it<br/>debugs errors · reports metric"]
+    R["💾 Record<br/>append result → journal.jsonl"]
 
     J --> B --> A --> R
     R -->|next step| J
@@ -97,12 +97,12 @@ python examples/synth_regression.py --seed 42 --steps 10
 ```mermaid
 graph LR
     subgraph "Classification (F1)"
-        C1["Step 1\n0.889\nHistGBT"] --> C2["Step 2\n0.912\nLogReg"]
-        C2 --> C3["Best\n0.919\nStacking"]
+        C1["Step 1<br/>0.889<br/>HistGBT"] --> C2["Step 2<br/>0.912<br/>LogReg"]
+        C2 --> C3["Best<br/>0.919<br/>Stacking"]
     end
 
     subgraph "Regression (R²)"
-        R1["Step 1\n0.757\nHistGBT"] --> R2["Best\n0.816\nRidgeCV"]
+        R1["Step 1<br/>0.757<br/>HistGBT"] --> R2["Best<br/>0.816<br/>RidgeCV"]
     end
 
     style C3 fill:#b3ffb3,stroke:#009900,stroke-width:3px
@@ -122,10 +122,10 @@ graph LR
 
 ```mermaid
 flowchart LR
-    S["Step N"] --> Sol["solution.py\n(scikit-learn code)"]
-    S --> Res["result.json\n({metric: float})"]
-    S --> Exp["exploration.md\n(reasoning traces)"]
-    S --> Resp[".agent_response.md\n(agent summary)"]
+    S["Step N"] --> Sol["solution.py<br/>(scikit-learn code)"]
+    S --> Res["result.json<br/>metric: float"]
+    S --> Exp["exploration.md<br/>(reasoning traces)"]
+    S --> Resp[".agent_response.md<br/>(agent summary)"]
 
     style Sol fill:#d4edda
     style Res fill:#fff3cd

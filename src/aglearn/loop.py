@@ -1,12 +1,15 @@
 """The evolve loop.
 
 Each step: brief the agent → agent does everything → record result.
+After all steps: agent analyzes all artifacts and writes a research report.
 """
 
 from __future__ import annotations
 
 import logging
 import os
+import shutil
+import subprocess
 from dataclasses import dataclass
 
 from . import agent
@@ -69,7 +72,15 @@ def evolve(
         log.info("done | best=%.4f  experiments=%d", best.metric_value, journal.count())
     else:
         log.warning("done | no successful solutions after %d steps", max_steps)
+
+    _generate_report(task, journal, output_dir, model=model, timeout=timeout)
+
     return best
+
+
+# ---------------------------------------------------------------------------
+# Experiment briefing
+# ---------------------------------------------------------------------------
 
 
 def _briefing(task: TaskConfig, journal: Journal) -> str:
@@ -102,6 +113,131 @@ def _briefing(task: TaskConfig, journal: Journal) -> str:
     )
 
     return "\n\n".join(parts)
+
+
+# ---------------------------------------------------------------------------
+# Report generation
+# ---------------------------------------------------------------------------
+
+
+def _generate_report(
+    task: TaskConfig,
+    journal: Journal,
+    output_dir: str,
+    *,
+    model: str | None = None,
+    timeout: int = 300,
+) -> None:
+    """Run the agent to analyze all artifacts and write a research report."""
+    if journal.count() == 0:
+        log.info("report | skipped (no experiments)")
+        return
+
+    log.info("report | generating…")
+
+    report_work_dir = os.path.join(output_dir, "_report")
+    os.makedirs(report_work_dir, exist_ok=True)
+
+    prompt = _report_briefing(task, journal, output_dir)
+    agent.run(prompt, report_work_dir, model=model, timeout=timeout)
+
+    # Move report.md to output root if the agent wrote it
+    src = os.path.join(report_work_dir, "report.md")
+    dst = os.path.join(output_dir, "report.md")
+    if os.path.exists(src):
+        shutil.move(src, dst)
+        log.info("report | wrote %s", dst)
+        _convert_to_pdf(dst)
+    else:
+        log.warning("report | agent did not produce report.md")
+
+
+def _report_briefing(task: TaskConfig, journal: Journal, output_dir: str) -> str:
+    step_dirs = sorted(
+        d for d in os.listdir(output_dir)
+        if d.startswith("step_") and os.path.isdir(os.path.join(output_dir, d))
+    )
+
+    step_listing = []
+    for d in step_dirs:
+        step_path = os.path.join(output_dir, d)
+        files = os.listdir(step_path)
+        step_listing.append(f"  {step_path}/  ({', '.join(sorted(files))})")
+
+    parts = [
+        "You are a research analyst writing a report on an ML experiment run.",
+
+        f"Task that was optimized:\n"
+        f"  {task.description}\n"
+        f"  Data: {task.data_path}\n"
+        f"  Target: {task.target_column}\n"
+        f"  Metric: {task.metric} (higher is better)",
+
+        f"Experiment journal (all experiments, best first):\n{journal.summary()}",
+
+        "Artifact locations — read these files to write your analysis:\n"
+        f"  Journal: {os.path.join(output_dir, 'journal.jsonl')}\n"
+        f"  Best solution: {os.path.join(output_dir, 'best_solution.py')}\n"
+        "  Step directories (each has solution.py, result.json, exploration.md, trace.jsonl):\n"
+        + "\n".join(step_listing),
+
+        "Write report.md — a detailed research report covering:\n"
+        "\n"
+        "1. **Summary** — task description, number of steps, metric trajectory,\n"
+        "   best result achieved\n"
+        "\n"
+        "2. **Evolution trajectory** — table of ALL steps: step number, score\n"
+        "   (or BUGGY), model used, key change from previous step.\n"
+        "   Read each step's solution.py and result.json.\n"
+        "\n"
+        "3. **Step-by-step analysis** — for EACH step, read the solution.py,\n"
+        "   exploration.md, and trace.jsonl. Describe:\n"
+        "   - What approach the agent took and why\n"
+        "   - What feature engineering was applied\n"
+        "   - What model and hyperparameters were chosen\n"
+        "   - What worked and what didn't\n"
+        "   - Key reasoning from the trace\n"
+        "\n"
+        "4. **Best solution analysis** — detailed walkthrough of the winning\n"
+        "   code from best_solution.py. Explain the pipeline, features,\n"
+        "   model, and why it outperformed the others.\n"
+        "\n"
+        "5. **Failure analysis** — for buggy steps, read the trace.jsonl to\n"
+        "   understand what went wrong.\n"
+        "\n"
+        "6. **Conclusions** — patterns observed across the evolution,\n"
+        "   what the agent learned (or failed to learn), insights about\n"
+        "   the dataset and task.\n"
+        "\n"
+        "Be specific — include actual metric values, code snippets, feature\n"
+        "names, and model parameters. This is a research artifact, not a\n"
+        "summary. Write it as report.md.",
+    ]
+
+    return "\n\n".join(parts)
+
+
+def _convert_to_pdf(md_path: str) -> None:
+    """Best-effort conversion of report.md to report.pdf via pandoc."""
+    if not shutil.which("pandoc"):
+        log.info("report | pandoc not found, skipping PDF conversion")
+        return
+
+    pdf_path = md_path.replace(".md", ".pdf")
+    try:
+        subprocess.run(
+            ["pandoc", md_path, "-o", pdf_path,
+             "--pdf-engine=xelatex",
+             "-V", "geometry:margin=1in",
+             "-V", "fontsize=11pt"],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=True,
+        )
+        log.info("report | wrote %s", pdf_path)
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError) as e:
+        log.warning("report | PDF conversion failed: %s", e)
 
 
 def _save_best(journal: Journal, output_dir: str) -> None:
