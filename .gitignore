@@ -209,6 +209,5 @@ __marimo__/
 # Local resources / docs
 resources/
 
-# Generated data and benchmark output
+# Downloaded datasets
 data/
-output/
