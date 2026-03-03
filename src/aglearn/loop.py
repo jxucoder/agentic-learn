@@ -16,6 +16,7 @@ from . import agent
 from .journal import Experiment, Journal
 
 log = logging.getLogger(__name__)
+DEFAULT_TIMEOUT_SECONDS = 600
 
 
 @dataclass
@@ -34,7 +35,7 @@ def evolve(
     *,
     model: str | None = None,
     max_steps: int = 10,
-    timeout: int = 300,
+    timeout: int = DEFAULT_TIMEOUT_SECONDS,
     output_dir: str = "./output",
 ) -> Experiment | None:
     """Run the evolve loop."""
@@ -60,6 +61,8 @@ def evolve(
             exploration=result.get("exploration", ""),
             metric_value=result["metric_value"],
             is_buggy=result["is_buggy"],
+            stdout=result.get("stdout", ""),
+            stderr=result.get("stderr", ""),
         )
         journal.add(exp)
 
@@ -109,7 +112,12 @@ def _briefing(task: TaskConfig, journal: Journal) -> str:
         "   - Key patterns and distributions you found in the data\n"
         "   - Feature engineering decisions and why (what signal did you see?)\n"
         "   - Model choice rationale\n"
-        "   - What you tried that didn't work and why"
+        "   - What you tried that didn't work and why\n"
+        "7. Environment constraints:\n"
+        "   - Use single-process execution only (`n_jobs=1`; avoid multiprocessing)\n"
+        "   - Avoid process-management shell commands (`ps`, `pkill`, etc.)\n"
+        "   - Prefer pandas-compatible APIs (avoid fragile version-specific args)\n"
+        "   - If any step fails, still persist as many artifacts as possible"
     )
 
     return "\n\n".join(parts)
@@ -126,7 +134,7 @@ def _generate_report(
     output_dir: str,
     *,
     model: str | None = None,
-    timeout: int = 300,
+    timeout: int = DEFAULT_TIMEOUT_SECONDS,
 ) -> None:
     """Run the agent to analyze all artifacts and write a research report."""
     if journal.count() == 0:
@@ -135,35 +143,24 @@ def _generate_report(
 
     log.info("report | generating…")
 
-    report_work_dir = os.path.join(output_dir, "_report")
-    os.makedirs(report_work_dir, exist_ok=True)
+    report_work_dir, report_path = _prepare_report_workspace(output_dir)
 
     prompt = _report_briefing(task, journal, output_dir)
     agent.run(prompt, report_work_dir, model=model, timeout=timeout)
 
     # Move report.md to output root if the agent wrote it
     src = os.path.join(report_work_dir, "report.md")
-    dst = os.path.join(output_dir, "report.md")
     if os.path.exists(src):
-        shutil.move(src, dst)
-        log.info("report | wrote %s", dst)
-        _convert_to_pdf(dst)
+        shutil.move(src, report_path)
+        log.info("report | wrote %s", report_path)
+        _convert_to_pdf(report_path)
     else:
-        log.warning("report | agent did not produce report.md")
+        _write_fallback_report(task, journal, report_path)
+        log.warning("report | agent did not produce report.md; wrote fallback report")
 
 
 def _report_briefing(task: TaskConfig, journal: Journal, output_dir: str) -> str:
-    step_dirs = sorted(
-        d
-        for d in os.listdir(output_dir)
-        if d.startswith("step_") and os.path.isdir(os.path.join(output_dir, d))
-    )
-
-    step_listing = []
-    for d in step_dirs:
-        step_path = os.path.join(output_dir, d)
-        files = os.listdir(step_path)
-        step_listing.append(f"  {step_path}/  ({', '.join(sorted(files))})")
+    step_listing = _step_artifact_listing(output_dir)
 
     parts = [
         "You are a research analyst writing a report on an ML experiment run.",
@@ -176,8 +173,9 @@ def _report_briefing(task: TaskConfig, journal: Journal, output_dir: str) -> str
         "Artifact locations — read these files to write your analysis:\n"
         f"  Journal: {os.path.join(output_dir, 'journal.jsonl')}\n"
         f"  Best solution: {os.path.join(output_dir, 'best_solution.py')}\n"
-        "  Step directories (each has solution.py, result.json, exploration.md, trace.jsonl):\n"
+        "  Step directories (each may contain solution.py, result.json, exploration.md, trace.jsonl):\n"
         + "\n".join(step_listing),
+        "Some steps may be incomplete or missing files. Call out missing artifacts explicitly.",
         "Write report.md — a detailed research report covering:\n"
         "\n"
         "1. **Summary** — task description, number of steps, metric trajectory,\n"
@@ -212,6 +210,52 @@ def _report_briefing(task: TaskConfig, journal: Journal, output_dir: str) -> str
     ]
 
     return "\n\n".join(parts)
+
+
+def _write_fallback_report(
+    task: TaskConfig, journal: Journal, report_path: str
+) -> None:
+    """Write a minimal fresh report when report generation fails."""
+    best = journal.best()
+    best_metric = f"{best.metric_value:.4f}" if best else "N/A"
+    contents = (
+        "# ML Experiment Research Report\n\n"
+        "## Report Status\n"
+        "The agent did not generate `report.md` for this run.\n"
+        "This fallback report is auto-generated to avoid stale report artifacts.\n\n"
+        "## Run Summary\n"
+        f"- Metric optimized: `{task.metric}`\n"
+        f"- Total experiments: `{journal.count()}`\n"
+        f"- Best metric: `{best_metric}`\n\n"
+        "## Successful Experiments (Best First)\n"
+        f"{journal.summary()}\n"
+    )
+    with open(report_path, "w", encoding="utf-8") as f:
+        f.write(contents)
+
+
+def _prepare_report_workspace(output_dir: str) -> tuple[str, str]:
+    report_work_dir = os.path.join(output_dir, "_report")
+    report_path = os.path.join(output_dir, "report.md")
+    shutil.rmtree(report_work_dir, ignore_errors=True)
+    os.makedirs(report_work_dir, exist_ok=True)
+    if os.path.exists(report_path):
+        os.remove(report_path)
+    return report_work_dir, report_path
+
+
+def _step_artifact_listing(output_dir: str) -> list[str]:
+    step_dirs = sorted(
+        d
+        for d in os.listdir(output_dir)
+        if d.startswith("step_") and os.path.isdir(os.path.join(output_dir, d))
+    )
+    listing = []
+    for d in step_dirs:
+        step_path = os.path.join(output_dir, d)
+        files = os.listdir(step_path)
+        listing.append(f"  {step_path}/  ({', '.join(sorted(files))})")
+    return listing
 
 
 def _convert_to_pdf(md_path: str) -> None:
@@ -252,5 +296,5 @@ def _save_best(journal: Journal, output_dir: str) -> None:
     best = journal.best()
     if best is None:
         return
-    with open(os.path.join(output_dir, "best_solution.py"), "w") as f:
+    with open(os.path.join(output_dir, "best_solution.py"), "w", encoding="utf-8") as f:
         f.write(best.code)
