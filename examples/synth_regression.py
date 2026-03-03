@@ -6,6 +6,7 @@ Usage:
 """
 
 import argparse
+import json
 import logging
 import os
 import sys
@@ -37,18 +38,23 @@ def main() -> None:
         seed=args.seed,
     )
     data_path = generate(synth, output_dir="data")
-    print(f"Generated synthetic dataset: {data_path}")
+    meta_path = os.path.join("data", "synth_reg_meta.json")
+    with open(meta_path) as f:
+        meta = json.load(f)
+    files = meta["files"]
+    print(f"Generated synthetic train split: {files['train']}")
+    print(f"Kaggle-style test split (no labels): {files['test']}")
 
     task = TaskConfig(
         description=(
-            "Regression on a synthetic dataset. "
-            "The 'target' column is a continuous value. "
-            "Features include income, age, hours_worked, distance_km, "
-            "region (categorical), education (categorical), and satisfaction (ordinal). "
-            "There may also be noise features — identify and handle them. "
-            "Some values are missing. "
-            "Feature engineering is important: look for non-linear effects "
-            "and interactions between features."
+            "Kaggle-style tabular regression on synthetic customer-event data. "
+            "The provided CSV is the TRAIN split with a continuous target. "
+            "A separate hidden TEST split exists without labels. "
+            "Features include temporal data, high-cardinality IDs/categories, "
+            "behavioral and financial numerics, plus noisy columns under mild train/test shift. "
+            "Missing values are present and partly non-random. "
+            "Use a realistic competition workflow: leakage-aware validation, "
+            "robust preprocessing, and non-linear interaction modeling."
         ),
         data_path=data_path,
         target_column="target",

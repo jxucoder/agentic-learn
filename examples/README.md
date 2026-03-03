@@ -18,9 +18,10 @@ python examples/synth_regression.py --seed 456 --noise 0.3
 ```
 
 The synthetic generator (`aglearn.synth`) creates datasets with:
-- **Known ground truth** — non-linear interactions the agent must discover
-- **Noise features** — two columns that should be ignored
-- **Missing values** — configurable fraction of NaNs
+- **Kaggle-style files** — train/test split, sample submission, hidden solution
+- **Known ground truth** — non-linear interactions with mixed feature types
+- **Distribution shift** — mild train/test drift to punish brittle validation
+- **Missing values** — MCAR + MNAR patterns
 - **Unique per seed** — the LLM has never seen the data
 
 See `synth_classification.py` and `synth_regression.py` for full options
