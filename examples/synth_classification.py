@@ -6,6 +6,7 @@ Usage:
 """
 
 import argparse
+import json
 import logging
 import os
 import sys
@@ -37,18 +38,26 @@ def main() -> None:
         seed=args.seed,
     )
     data_path = generate(synth, output_dir="data")
-    print(f"Generated synthetic dataset: {data_path}")
+    meta_path = os.path.join("data", "synth_clf_meta.json")
+    with open(meta_path) as f:
+        meta = json.load(f)
+    files = meta["files"]
+    print(f"Generated synthetic train split: {files['train']}")
+    print(f"Kaggle-style test split (no labels): {files['test']}")
 
     task = TaskConfig(
         description=(
-            "Binary classification on a synthetic dataset. "
-            "The 'target' column is the label (0 or 1). "
-            "Features include income, age, hours_worked, distance_km, "
-            "region (categorical), education (categorical), and satisfaction (ordinal). "
-            "There may also be noise features — identify and handle them. "
-            "Some values are missing. "
-            "Feature engineering is important: look for non-linear effects "
-            "and interactions between features."
+            "Kaggle-style binary classification on synthetic customer-event data. "
+            "The provided CSV is the TRAIN split and includes target (0/1). "
+            "A hidden TEST split exists separately with no labels. "
+            "Columns include mixed data types: temporal features (event_date), "
+            "IDs/high-cardinality categoricals (customer_id, city_code, campaign_id), "
+            "behavioral numerics (sessions_30d, tenure_months, avg_order_value, return_rate), "
+            "and categorical business context (segment, plan_tier, acquisition_channel, region). "
+            "Some columns are noisy or spurious under distribution shift (e.g. campaign-related proxy), "
+            "and missingness is partly non-random. "
+            "Treat this like a Kaggle tabular problem: strong validation strategy, "
+            "robust preprocessing, and interaction-aware feature engineering."
         ),
         data_path=data_path,
         target_column="target",

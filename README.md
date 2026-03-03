@@ -94,6 +94,13 @@ python examples/synth_classification.py --seed 42 --steps 10
 python examples/synth_regression.py --seed 42 --steps 10
 ```
 
+Each synthetic run now writes a Kaggle-style bundle in `data/`:
+- `synth_<name>_train.csv` (labeled train split, used by the agent)
+- `synth_<name>_test.csv` (unlabeled test split)
+- `synth_<name>_sample_submission.csv`
+- `synth_<name>_solution.csv` (hidden labels for offline evaluation)
+- `synth_<name>_meta.json` (paths + generation details)
+
 ```mermaid
 graph LR
     subgraph "Classification (F1)"
@@ -143,7 +150,7 @@ src/aglearn/
 ├── journal.py       # Experiment dataclass + append-only Journal
 ├── agent.py         # Codex exec wrapper
 ├── loop.py          # Briefing builder + evolve loop
-└── synth.py         # Synthetic dataset generator (leak-free benchmarks)
+└── synth.py         # Synthetic Kaggle-style dataset generator
 
 examples/
 ├── synth_classification.py   # Synthetic binary classification (recommended)
