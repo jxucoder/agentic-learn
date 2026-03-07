@@ -50,3 +50,31 @@ def test_run_solution_fallback_recovers_metric(tmp_path: Path):
     assert "Recovered metric" in note
     result_payload = json.loads((tmp_path / "result.json").read_text(encoding="utf-8"))
     assert result_payload["metric"] == 0.77
+
+
+def test_run_clears_stale_artifacts_before_loading_results(tmp_path: Path, monkeypatch):
+    (tmp_path / "solution.py").write_text("print('stale')\n", encoding="utf-8")
+    (tmp_path / "result.json").write_text('{"metric": 0.91}\n', encoding="utf-8")
+    (tmp_path / "exploration.md").write_text("stale exploration\n", encoding="utf-8")
+    (tmp_path / ".agent_response.md").write_text("stale hypothesis\n", encoding="utf-8")
+
+    monkeypatch.setattr(
+        agent,
+        "_invoke_codex",
+        lambda **kwargs: ("", "simulated failure", 1, False),
+    )
+
+    result = agent.run("prompt", str(tmp_path), timeout=1)
+
+    assert result["code"] == ""
+    assert result["exploration"] == ""
+    assert result["metric_value"] is None
+    assert result["is_buggy"] is True
+    assert result["hypothesis"] == "codex exec failed (exit 1): simulated failure"
+
+
+def test_as_float_rejects_non_finite_metrics():
+    assert agent._as_float("0.25") == 0.25
+    assert agent._as_float("NaN") is None
+    assert agent._as_float(float("inf")) is None
+    assert agent._as_float("-inf") is None

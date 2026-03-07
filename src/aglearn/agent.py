@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import subprocess
 import sys
@@ -36,9 +37,18 @@ def run(
 
     Returns dict with keys: code, hypothesis, metric_value, is_buggy.
     """
+    os.makedirs(work_dir, exist_ok=True)
     response_path = os.path.join(work_dir, ".agent_response.md")
     trace_path = os.path.join(work_dir, "trace.jsonl")
     stderr_path = os.path.join(work_dir, "trace.stderr.log")
+    _clear_run_artifacts(
+        response_path,
+        trace_path,
+        stderr_path,
+        os.path.join(work_dir, "solution.py"),
+        os.path.join(work_dir, "result.json"),
+        os.path.join(work_dir, "exploration.md"),
+    )
     cmd = _build_command(work_dir, response_path, model=model)
     run_env = _build_run_env()
 
@@ -264,9 +274,20 @@ def _to_text(value: str | bytes | None) -> str:
 
 def _as_float(value: object) -> float | None:
     try:
-        return float(value) if value is not None else None
+        if value is None:
+            return None
+        result = float(value)
+        return result if math.isfinite(result) else None
     except (TypeError, ValueError):
         return None
+
+
+def _clear_run_artifacts(*paths: str) -> None:
+    for path in paths:
+        try:
+            os.remove(path)
+        except FileNotFoundError:
+            continue
 
 
 def _write(path: str, content: str) -> None:

@@ -39,7 +39,7 @@ def evolve(
     output_dir: str = "./output",
 ) -> Experiment | None:
     """Run the evolve loop."""
-    os.makedirs(output_dir, exist_ok=True)
+    _prepare_output_dir(output_dir)
     journal = Journal(os.path.join(output_dir, "journal.jsonl"))
 
     log.info(
@@ -242,6 +242,26 @@ def _prepare_report_workspace(output_dir: str) -> tuple[str, str]:
     if os.path.exists(report_path):
         os.remove(report_path)
     return report_work_dir, report_path
+
+
+def _prepare_output_dir(output_dir: str) -> None:
+    """Remove generated artifacts so each evolve() call starts fresh."""
+    os.makedirs(output_dir, exist_ok=True)
+
+    generated_files = {"journal.jsonl", "best_solution.py", "report.md", "report.pdf"}
+    generated_dirs = {"_report"}
+
+    for entry in os.listdir(output_dir):
+        path = os.path.join(output_dir, entry)
+        if entry in generated_files and os.path.isfile(path):
+            os.remove(path)
+        elif entry in generated_dirs and os.path.isdir(path):
+            shutil.rmtree(path, ignore_errors=True)
+        elif entry.startswith("step_"):
+            if os.path.isdir(path):
+                shutil.rmtree(path, ignore_errors=True)
+            elif os.path.exists(path):
+                os.remove(path)
 
 
 def _step_artifact_listing(output_dir: str) -> list[str]:

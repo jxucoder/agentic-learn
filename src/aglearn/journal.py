@@ -6,6 +6,7 @@ Stores every experiment the agent has tried. Persisted as JSON lines.
 from __future__ import annotations
 
 import json
+import math
 import os
 import time
 import uuid
@@ -59,7 +60,9 @@ class Journal:
     # ---- persistence (JSON lines) ----
 
     def _append(self, exp: Experiment) -> None:
-        os.makedirs(os.path.dirname(self._path), exist_ok=True)
+        dirpath = os.path.dirname(self._path)
+        if dirpath:
+            os.makedirs(dirpath, exist_ok=True)
         with open(self._path, "a") as f:
             f.write(json.dumps(asdict(exp)) + "\n")
 
@@ -75,8 +78,15 @@ class Journal:
             [
                 e
                 for e in self._experiments
-                if not e.is_buggy and e.metric_value is not None
+                if not e.is_buggy and _is_finite_metric(e.metric_value)
             ],
-            key=lambda e: e.metric_value,
+            key=lambda e: float(e.metric_value),
             reverse=True,
         )
+
+
+def _is_finite_metric(value: object) -> bool:
+    try:
+        return value is not None and math.isfinite(float(value))
+    except (TypeError, ValueError):
+        return False
