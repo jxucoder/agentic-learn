@@ -19,7 +19,7 @@ python examples/synth_regression.py --seed 456 --noise 0.3
 
 The synthetic generator (`aglearn.synth`) creates datasets with:
 - **Kaggle-style files** — train/test split, sample submission, hidden solution
-- **Known ground truth** — non-linear interactions with mixed feature types
+- **Hidden signal structure** — non-linear effects with mixed feature types
 - **Distribution shift** — mild train/test drift to punish brittle validation
 - **Missing values** — MCAR + MNAR patterns
 - **Unique per seed** — the LLM has never seen the data
@@ -46,9 +46,8 @@ python examples/synth_multiclass.py --seed 123 --steps 20
 | What makes it hard | Details |
 |---|---|
 | 5 imbalanced classes (minority = 5%) | Requires class weighting / oversampling |
-| 3-way feature interactions | salary × seniority × department |
-| Conditional effects | project_count only matters in eng/research |
-| Correlated noise features | Look informative but don't predict target |
+| Mixed feature types | Requires robust preprocessing and encoding |
+| Distractor columns | Look predictive in some folds but fail to generalize |
 | MNAR missing values | High values are more likely to be missing |
 
 ### Temporal regression (sales forecasting)
@@ -64,7 +63,7 @@ python examples/synth_temporal_regression.py --seed 456 --steps 20
 | 50 store IDs (high-cardinality categorical) | Needs target encoding / embeddings |
 | 5% outlier contamination in target | Requires robust loss or outlier removal |
 | Heteroscedastic noise | Variance depends on price and traffic |
-| Price elasticity & diminishing returns | Non-linear economic relationships |
+| Hidden non-linear effects | Benefits from interaction-aware modeling |
 
 ### High-dimensional feature selection
 
@@ -75,10 +74,9 @@ python examples/synth_high_dim.py --seed 789 --steps 20
 
 | What makes it hard | Details |
 |---|---|
-| 50 features, only 8 informative | Must do aggressive feature selection |
-| XOR-like interactions | sign(x1) × sign(x2) defeats linear models |
-| Redundant features (near-copies) | Including both hurts performance |
-| Multicollinear group of 5 features | Should be reduced / dropped |
+| 50 dense features | Requires aggressive feature selection |
+| Hidden non-linear structure | Linear baselines often underperform |
+| Redundant & multicollinear columns | Selection/regularization is critical |
 | Obfuscated feature names (feat_XX) | No semantic hints — must be data-driven |
 
 ---

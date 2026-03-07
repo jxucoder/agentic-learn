@@ -2,10 +2,9 @@
 
 Challenges beyond the basic classification benchmark:
 - 5 imbalanced classes (minority class is only 5% of data)
-- 3-way feature interactions
-- Conditional effects (feature only matters within a subgroup)
-- Correlated noise features that look informative
-- Non-random missing values (MNAR)
+- mixed numeric and categorical predictors
+- non-random missing values (MNAR)
+- distractor columns and non-linear effects
 
 Usage:
     python examples/synth_multiclass.py
@@ -55,12 +54,9 @@ def main() -> None:
             "Features include salary, experience_years, weekly_hours, project_count, "
             "team_size, department (8 categories), seniority (5 levels), location, "
             "performance_score, and commute_minutes. "
-            "There are also several noise features — some are correlated with inputs "
-            "but NOT with the target, making them deceptive. "
             "Missing values are NOT random — higher values are more likely missing. "
-            "Feature engineering is critical: look for multi-way interactions, "
-            "conditional effects (features that only matter for certain subgroups), "
-            "and non-linear transformations. "
+            "Treat this as a realistic Kaggle-style task: some columns are distracting, "
+            "effects are non-linear, and robust validation matters. "
             "Use macro-averaged F1 to handle class imbalance fairly. "
             "Consider class weighting, oversampling, or other imbalance strategies."
         ),

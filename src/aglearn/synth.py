@@ -128,9 +128,9 @@ def generate(task: SyntheticTask, output_dir: str = "data") -> str:
     campaign_id = rng.choice(campaign_pool, size=n)
     customer_id = np.array([f"C{c:06d}" for c in rng.integers(10_000, 16_000, size=n)])
 
-    # Noise-only columns (easy for overfitting, useless in holdout).
-    noise_feature_a = rng.normal(0, 1, size=n)
-    noise_feature_b = rng.zipf(a=2.0, size=n).astype(float)
+    # Distractor columns (easy for overfitting, weak/no stable signal).
+    aux_metric_01 = rng.normal(0, 1, size=n)
+    aux_bucket_02 = rng.zipf(a=2.0, size=n).astype(float)
 
     # Hidden effects with train/test mismatch to simulate leaderboard surprises.
     city_effect_map = dict(zip(city_pool, rng.normal(0, 0.25, size=len(city_pool))))
@@ -246,8 +246,8 @@ def generate(task: SyntheticTask, output_dir: str = "data") -> str:
             "city_code": city_code,
             "campaign_id": campaign_id,
             "campaign_quality_proxy": np.round(campaign_quality_proxy, 4),
-            "noise_feature_a": np.round(noise_feature_a, 4),
-            "noise_feature_b": noise_feature_b.astype(int),
+            "aux_metric_01": np.round(aux_metric_01, 4),
+            "aux_bucket_02": aux_bucket_02.astype(int),
             "target": (
                 target if task.task_type == "classification" else np.round(target, 4)
             ),
@@ -305,33 +305,10 @@ def generate(task: SyntheticTask, output_dir: str = "data") -> str:
             "solution": os.path.abspath(solution_path),
             "sample_submission": os.path.abspath(sample_path),
         },
-        "informative_features": [
-            "income",
-            "age",
-            "tenure_months",
-            "sessions_30d",
-            "avg_order_value",
-            "discount_rate",
-            "support_wait_minutes",
-            "return_rate",
-            "complaints_90d",
-            "marketing_touches_30d",
-            "region",
-            "segment",
-            "plan_tier",
-            "acquisition_channel",
-            "city_code",
-            "campaign_id",
-            "campaign_quality_proxy",
-        ],
-        "noise_features": ["noise_feature_a", "noise_feature_b"],
-        "interactions": [
-            "log(income) + log(avg_order_value) with non-linear engagement term",
-            "plan_tier × log(marketing_touches_30d)",
-            "region-dependent sessions boost for west",
-            "risk penalty from support_wait, return_rate, complaints",
-            "high-cardinality city_code with hidden random effects",
-            "campaign effects drift between train and test (distribution shift)",
+        "feature_columns": [c for c in train_df.columns if c != "target"],
+        "notes": [
+            "Kaggle-style: no ground-truth feature importance is exposed.",
+            "Includes distribution shift, high-cardinality categories, and missingness patterns.",
         ],
     }
 

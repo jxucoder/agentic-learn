@@ -1,11 +1,10 @@
 """Synthetic high-dimensional classification — harder benchmark.
 
 Challenges beyond the basic classification benchmark:
-- 50 features but only 8 are informative
-- XOR-like interactions that defeat linear models
-- Redundant features (near-copies of informative ones)
-- Multicollinear feature groups
-- Feature names are shuffled (no semantic hints)
+- 50 dense feature columns
+- sparse predictive structure
+- redundant and multicollinear columns
+- feature names have no semantic hints
 
 Usage:
     python examples/synth_high_dim.py
@@ -52,17 +51,10 @@ def main() -> None:
         description=(
             "Binary classification on a high-dimensional synthetic dataset. "
             "The 'target' column is the label (0 or 1). "
-            "There are 50 features (feat_00 through feat_49) but most are noise. "
-            "Only ~8 features are truly informative — the rest are pure noise, "
-            "redundant copies, or multicollinear groups. "
+            "There are 50 features (feat_00 through feat_49) with uninformative names. "
             "Feature names are deliberately uninformative (feat_XX). "
-            "The true signal involves XOR-like interactions: pairs of features "
-            "interact non-linearly so linear models will struggle. "
-            "Some noise features are near-duplicates of real features (with added noise) "
-            "— including both the original and copy hurts more than helps. "
-            "There is a group of ~5 multicollinear features — they should be reduced. "
-            "Strategy: start with aggressive feature selection (mutual information, "
-            "tree-based importance, or RFECV), then look for non-linear interactions. "
+            "The dataset includes redundant columns, multicollinearity, and non-linear effects. "
+            "Use a realistic feature-selection workflow before model tuning. "
             "Some values are missing across a random subset of columns."
         ),
         data_path=data_path,

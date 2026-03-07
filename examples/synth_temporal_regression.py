@@ -3,9 +3,8 @@
 Challenges beyond the basic regression benchmark:
 - Time-ordered data with trend and seasonal components
 - High-cardinality categorical (50 store IDs)
-- Heteroscedastic noise (variance depends on features)
-- 5% outlier contamination in the target
-- Complex price elasticity and diminishing-returns effects
+- heteroscedastic noise and outliers
+- distractor columns with plausible temporal structure
 
 Usage:
     python examples/synth_temporal_regression.py
@@ -54,16 +53,11 @@ def main() -> None:
             "The 'target' column is a continuous sales value. "
             "The data has temporal structure: day_index, day_of_week, and month "
             "encode time — look for trends, weekly patterns, and seasonality. "
-            "store_id is a high-cardinality categorical (50 stores) — each store "
-            "has a hidden quality factor. Consider target encoding or entity embeddings. "
+            "store_id is a high-cardinality categorical (50 stores). "
             "Features include price, competitor_price, promotion, foot_traffic, "
             "online_reviews, ad_spend, inventory_level, and temperature. "
-            "There are noise features that may look informative (e.g., a random walk "
-            "trend, fake seasonal pattern). "
             "The target contains ~5% outliers — consider robust methods. "
-            "Key interactions: price elasticity (log price ratio vs competitor), "
-            "promotion effect depends on foot traffic, ad spend has diminishing "
-            "returns modulated by temperature, inventory has a U-shape effect. "
+            "Some columns are distractors and relationships are non-linear. "
             "Some missing values are present across numeric features."
         ),
         data_path=data_path,

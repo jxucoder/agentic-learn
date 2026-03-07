@@ -1,9 +1,9 @@
-"""Harder synthetic benchmarks that test advanced ML engineering skills.
+"""Harder synthetic benchmarks for advanced tabular ML evaluation.
 
-These generators create datasets with challenges beyond the basic synth module:
-- Multi-class with class imbalance
-- Temporal structure with high-cardinality categoricals
-- High-dimensional feature selection (many noise features)
+These generators intentionally include realistic failure modes:
+- class imbalance and non-linear interactions
+- temporal structure with entity effects and outliers
+- high-dimensional feature spaces with redundant/distractor columns
 """
 
 from __future__ import annotations
@@ -34,9 +34,8 @@ def generate_multiclass(task: HardSyntheticTask, output_dir: str = "data") -> st
 
     Challenges:
     - 5 imbalanced classes (40%, 25%, 18%, 12%, 5%)
-    - 3-way feature interactions
-    - Conditional effects (feature only matters within a subgroup)
-    - Correlated noise features (correlated with inputs, not target)
+    - non-linear and conditional effects
+    - correlated distractor columns
     - 15% missing values with non-random missingness
     """
     rng = np.random.default_rng(task.seed)
@@ -77,12 +76,12 @@ def generate_multiclass(task: HardSyntheticTask, output_dir: str = "data") -> st
     performance_score = rng.beta(a=5, b=2, size=n) * 10  # 0-10, right-skewed
     commute_minutes = rng.exponential(scale=25, size=n)
 
-    # ── Noise features (correlated with inputs but not target) ────
-    noise_salary_echo = salary * rng.normal(1.0, 0.3, size=n)  # correlated with salary
-    noise_hours_echo = weekly_hours + rng.normal(0, 5, size=n)  # correlated with hours
-    noise_random_a = rng.standard_normal(size=n)
-    noise_random_b = rng.uniform(0, 100, size=n)
-    noise_random_c = rng.integers(0, 20, size=n).astype(float)
+    # ── Distractor features (correlated with inputs but weak signal) ──
+    aux_comp_01 = salary * rng.normal(1.0, 0.3, size=n)
+    aux_comp_02 = weekly_hours + rng.normal(0, 5, size=n)
+    aux_metric_03 = rng.standard_normal(size=n)
+    aux_metric_04 = rng.uniform(0, 100, size=n)
+    aux_bucket_05 = rng.integers(0, 20, size=n).astype(float)
 
     # ── Ground truth: complex multi-class signal ──────────────────
     dept_code = np.select(
@@ -171,11 +170,11 @@ def generate_multiclass(task: HardSyntheticTask, output_dir: str = "data") -> st
             "location": location,
             "performance_score": np.round(performance_score, 2),
             "commute_minutes": np.round(commute_minutes, 1),
-            "noise_salary_corr": np.round(noise_salary_echo, 2),
-            "noise_hours_corr": np.round(noise_hours_echo, 1),
-            "noise_random_a": np.round(noise_random_a, 3),
-            "noise_random_b": np.round(noise_random_b, 2),
-            "noise_random_c": noise_random_c.astype(int),
+            "aux_comp_01": np.round(aux_comp_01, 2),
+            "aux_comp_02": np.round(aux_comp_02, 1),
+            "aux_metric_03": np.round(aux_metric_03, 3),
+            "aux_metric_04": np.round(aux_metric_04, 2),
+            "aux_bucket_05": aux_bucket_05.astype(int),
             "target": y,
         }
     )
@@ -210,31 +209,10 @@ def generate_multiclass(task: HardSyntheticTask, output_dir: str = "data") -> st
         "missing_frac": task.missing_frac,
         "missing_pattern": "MNAR for salary/performance/commute; MCAR for others",
         "seed": task.seed,
-        "informative_features": [
-            "salary",
-            "experience_years",
-            "weekly_hours",
-            "project_count",
-            "team_size",
-            "department",
-            "seniority",
-            "location",
-            "performance_score",
-            "commute_minutes",
-        ],
-        "noise_features": [
-            "noise_salary_corr",
-            "noise_hours_corr",
-            "noise_random_a",
-            "noise_random_b",
-            "noise_random_c",
-        ],
-        "interactions": [
-            "salary × seniority × department (3-way multiplicative)",
-            "project_count only matters for engineering/research (conditional)",
-            "sqrt(performance) × log(experience) (diminishing returns)",
-            "team_size quadratic (peaks at ~7)",
-            "commute penalty only for non-remote (conditional)",
+        "feature_columns": [c for c in df.columns if c != "target"],
+        "notes": [
+            "Ground-truth feature relevance is intentionally hidden.",
+            "Dataset includes class imbalance, non-random missingness, and distractor columns.",
         ],
     }
     meta_path = os.path.join(output_dir, f"synth_{task.name}_meta.json")
@@ -252,9 +230,8 @@ def generate_temporal_regression(
     Challenges:
     - Time-ordered data with trend + seasonal components
     - High-cardinality categorical (50 store IDs)
-    - Heteroscedastic noise (variance depends on features)
-    - 5% outlier contamination in the target
-    - Lagged feature effects
+    - Heteroscedastic noise and 5% outliers in the target
+    - distractor columns with plausible temporal patterns
     """
     rng = np.random.default_rng(task.seed)
     n = task.n_samples
@@ -281,12 +258,12 @@ def generate_temporal_regression(
     ad_spend = rng.exponential(scale=500, size=n)
     inventory_level = rng.integers(10, 500, size=n).astype(float)
 
-    # ── Noise features ────────────────────────────────────────────
-    noise_ts_a = np.cumsum(rng.normal(0, 0.1, size=n))  # random walk (tricky)
-    noise_ts_b = rng.standard_normal(size=n)
-    noise_cat = rng.choice(["A", "B", "C", "D", "E"], size=n)
-    noise_uniform = rng.uniform(0, 1000, size=n)
-    noise_seasonal = np.sin(2 * np.pi * day_index / 7) * rng.normal(1, 0.5, size=n)
+    # ── Distractor features ───────────────────────────────────────
+    aux_series_01 = np.cumsum(rng.normal(0, 0.1, size=n))
+    aux_metric_02 = rng.standard_normal(size=n)
+    aux_group_03 = rng.choice(["A", "B", "C", "D", "E"], size=n)
+    aux_metric_04 = rng.uniform(0, 1000, size=n)
+    aux_series_05 = np.sin(2 * np.pi * day_index / 7) * rng.normal(1, 0.5, size=n)
 
     # ── Ground truth ──────────────────────────────────────────────
     # Trend component
@@ -351,11 +328,11 @@ def generate_temporal_regression(
             "online_reviews": np.round(online_reviews, 2),
             "ad_spend": np.round(ad_spend, 2),
             "inventory_level": inventory_level.astype(int),
-            "noise_trend": np.round(noise_ts_a, 3),
-            "noise_random": np.round(noise_ts_b, 3),
-            "noise_category": noise_cat,
-            "noise_uniform": np.round(noise_uniform, 2),
-            "noise_seasonal": np.round(noise_seasonal, 3),
+            "aux_series_01": np.round(aux_series_01, 3),
+            "aux_metric_02": np.round(aux_metric_02, 3),
+            "aux_group_03": aux_group_03,
+            "aux_metric_04": np.round(aux_metric_04, 2),
+            "aux_series_05": np.round(aux_series_05, 3),
             "target": np.round(y, 4),
         }
     )
@@ -390,37 +367,10 @@ def generate_temporal_regression(
         "seed": task.seed,
         "n_stores": n_stores,
         "outlier_frac": 0.05,
-        "informative_features": [
-            "day_index",
-            "day_of_week",
-            "month",
-            "store_id",
-            "temperature",
-            "price",
-            "promotion",
-            "competitor_price",
-            "foot_traffic",
-            "online_reviews",
-            "ad_spend",
-            "inventory_level",
-        ],
-        "noise_features": [
-            "noise_trend",
-            "noise_random",
-            "noise_category",
-            "noise_uniform",
-            "noise_seasonal",
-        ],
-        "interactions": [
-            "trend + weekend + monthly seasonality (temporal decomposition)",
-            "price elasticity: -log(price) + log(competitor_price)",
-            "price_ratio = log(competitor_price / price)",
-            "promotion × log(foot_traffic) (conditional boost)",
-            "online_reviews × store_quality (hidden entity embedding)",
-            "log(ad_spend) × temperature (seasonal ad effectiveness)",
-            "inventory U-shape penalty (optimal ~200)",
-            "heteroscedastic noise (harder targets have more variance)",
-            "5% outlier contamination in target",
+        "feature_columns": [c for c in df.columns if c != "target"],
+        "notes": [
+            "Ground-truth feature relevance is intentionally hidden.",
+            "Dataset includes temporal effects, outliers, and distractor columns.",
         ],
     }
     meta_path = os.path.join(output_dir, f"synth_{task.name}_meta.json")
@@ -434,11 +384,10 @@ def generate_high_dim(task: HardSyntheticTask, output_dir: str = "data") -> str:
     """Generate a high-dimensional binary classification dataset.
 
     Challenges:
-    - 50 features total, only 8 are informative
-    - XOR-like interaction patterns (defeat linear models)
-    - Multicollinear feature groups
-    - Redundant features (near-duplicates of informative ones)
-    - Signal buried in noise — requires aggressive feature selection
+    - 50 dense feature columns with sparse predictive structure
+    - non-linear interaction patterns
+    - multicollinear groups and redundant columns
+    - missingness across a random subset of columns
     """
     rng = np.random.default_rng(task.seed)
     n = task.n_samples
@@ -546,16 +495,6 @@ def generate_high_dim(task: HardSyntheticTask, output_dir: str = "data") -> str:
     path = os.path.join(output_dir, f"synth_{task.name}.csv")
     df.to_csv(path, index=False)
 
-    informative_names = sorted(informative.keys())
-    redundant_names = ["feat_04", "feat_18", "feat_40"]
-    multicollinear_names = ["feat_25", "feat_26", "feat_27", "feat_28", "feat_29"]
-    noise_names = sorted(
-        set(features.keys())
-        - set(informative_names)
-        - set(redundant_names)
-        - set(multicollinear_names)
-    )
-
     meta = {
         "name": task.name,
         "task_type": "high_dim_classification",
@@ -565,19 +504,10 @@ def generate_high_dim(task: HardSyntheticTask, output_dir: str = "data") -> str:
         "noise_level": task.noise_level,
         "missing_frac": task.missing_frac,
         "seed": task.seed,
-        "informative_features": informative_names,
-        "redundant_features": redundant_names,
-        "multicollinear_group": multicollinear_names,
-        "noise_features": noise_names,
-        "interactions": [
-            "sign(feat_03) × sign(feat_17) (XOR pattern — defeats linear models)",
-            "feat_22 × feat_08 - feat_08² (polynomial interaction)",
-            "feat_31 > 0 ? log(feat_45) : -sqrt(feat_45) (conditional threshold)",
-            "tanh(feat_12 / feat_39 - 2) (ratio with saturation)",
-            "feat_04 ≈ feat_03 + noise (redundant copy)",
-            "feat_18 ≈ feat_17 × 1.1 + noise (redundant copy)",
-            "feat_40 ≈ log(feat_39) + noise (redundant copy)",
-            "feat_25..29 form multicollinear group (should be reduced)",
+        "feature_columns": [c for c in df.columns if c != "target"],
+        "notes": [
+            "Ground-truth feature relevance is intentionally hidden.",
+            "Dataset includes redundancy, multicollinearity, and non-linear effects.",
         ],
     }
     meta_path = os.path.join(output_dir, f"synth_{task.name}_meta.json")
