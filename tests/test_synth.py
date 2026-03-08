@@ -7,7 +7,7 @@ import tempfile
 import numpy as np
 import pandas as pd
 
-from aglearn.synth import SyntheticTask, generate
+from aglearn.data.synth import SyntheticTask, generate
 
 
 def test_generate_classification():

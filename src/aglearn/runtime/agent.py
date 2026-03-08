@@ -1,4 +1,4 @@
-"""Run a coding agent (codex CLI) to produce a solution."""
+"""Run a coding agent through a CLI tool to produce a solution."""
 
 from __future__ import annotations
 
@@ -7,7 +7,24 @@ import math
 import os
 import subprocess
 import sys
-from typing import TypedDict
+from dataclasses import dataclass, field
+from typing import Literal, Mapping, TypedDict
+
+PromptMode = Literal["stdin", "arg"]
+
+
+@dataclass(frozen=True)
+class AgentCLIConfig:
+    """Describe how to invoke an agentic CLI."""
+
+    name: str
+    program: str
+    args_before_model: tuple[str, ...] = ()
+    args_after_model: tuple[str, ...] = ()
+    model_flag: tuple[str, ...] = ()
+    prompt_mode: PromptMode = "stdin"
+    prompt_flag: tuple[str, ...] = ()
+    env: Mapping[str, str] = field(default_factory=dict)
 
 
 class AgentRunResult(TypedDict):
@@ -26,8 +43,9 @@ def run(
     *,
     model: str | None = None,
     timeout: int = 600,
+    cli: AgentCLIConfig | None = None,
 ) -> AgentRunResult:
-    """Invoke ``codex exec`` and return the result.
+    """Invoke an agent CLI and return the result.
 
     The agent works inside *work_dir*: it explores data, writes
     ``solution.py``, runs it, and writes ``result.json``.
@@ -41,6 +59,7 @@ def run(
     response_path = os.path.join(work_dir, ".agent_response.md")
     trace_path = os.path.join(work_dir, "trace.jsonl")
     stderr_path = os.path.join(work_dir, "trace.stderr.log")
+    cli_config = cli or codex_cli_config()
     _clear_run_artifacts(
         response_path,
         trace_path,
@@ -48,13 +67,21 @@ def run(
         os.path.join(work_dir, "solution.py"),
         os.path.join(work_dir, "result.json"),
         os.path.join(work_dir, "exploration.md"),
+        os.path.join(work_dir, "submission.csv"),
     )
-    cmd = _build_command(work_dir, response_path, model=model)
-    run_env = _build_run_env()
-
-    raw_stdout, raw_stderr, return_code, timed_out = _invoke_codex(
-        cmd=cmd,
+    cmd = _build_command(
+        work_dir,
+        response_path,
+        model=model,
+        cli=cli_config,
         prompt=prompt,
+    )
+    run_env = _build_run_env(cli=cli_config)
+
+    raw_stdout, raw_stderr, return_code, timed_out = _invoke_agent(
+        cmd=cmd,
+        prompt=prompt if cli_config.prompt_mode == "stdin" else None,
+        work_dir=work_dir,
         timeout=timeout,
         run_env=run_env,
     )
@@ -67,6 +94,7 @@ def run(
     code, result_data, exploration, hypothesis = _load_run_artifacts(
         work_dir=work_dir,
         response_path=response_path,
+        raw_stdout=raw_stdout,
     )
     metric = _metric_from_result(result_data)
 
@@ -78,6 +106,7 @@ def run(
 
     if not hypothesis:
         hypothesis = _fallback_hypothesis(
+            runner_name=cli_config.name,
             timed_out=timed_out,
             timeout=timeout,
             return_code=return_code,
@@ -97,14 +126,66 @@ def run(
     }
 
 
-def _invoke_codex(
+def codex_cli_config(
+    *,
+    oss: bool = False,
+    local_provider: str | None = None,
+) -> AgentCLIConfig:
+    """Return the default Codex CLI configuration."""
+    access_mode = os.getenv("AGLEARN_CODEX_ACCESS_MODE", "bypass").strip().lower()
+    access_args: list[str]
+    if access_mode in {"full-auto", "sandbox"}:
+        access_args = ["--full-auto", "--sandbox", "danger-full-access"]
+    else:
+        access_args = ["--dangerously-bypass-approvals-and-sandbox"]
+
+    args_before_model = [
+        "exec",
+        *access_args,
+        "--ephemeral",
+        "--skip-git-repo-check",
+        "--json",
+        "-o",
+        "{response_file}",
+    ]
+    if oss:
+        args_before_model.append("--oss")
+        if local_provider:
+            args_before_model.extend(["--local-provider", local_provider])
+
+    return AgentCLIConfig(
+        name="codex-oss" if oss else "codex",
+        program="codex",
+        args_before_model=tuple(args_before_model),
+        args_after_model=("-",),
+        model_flag=("-m",),
+    )
+
+
+def claude_cli_config() -> AgentCLIConfig:
+    """Return a non-interactive Claude Code configuration."""
+    return AgentCLIConfig(
+        name="claude",
+        program="claude",
+        args_before_model=(
+            "-p",
+            "--output-format",
+            "json",
+            "--dangerously-skip-permissions",
+        ),
+        model_flag=("--model",),
+    )
+
+
+def _invoke_agent(
     *,
     cmd: list[str],
-    prompt: str,
+    prompt: str | None,
+    work_dir: str,
     timeout: int,
     run_env: dict[str, str],
 ) -> tuple[str, str, int | None, bool]:
-    """Run codex and return stdout, stderr, return_code, timed_out."""
+    """Run an agent CLI and return stdout, stderr, return_code, timed_out."""
     try:
         proc = subprocess.run(
             cmd,
@@ -113,6 +194,7 @@ def _invoke_codex(
             text=True,
             timeout=timeout,
             env=run_env,
+            cwd=work_dir,
         )
         return proc.stdout or "", proc.stderr or "", proc.returncode, False
     except subprocess.TimeoutExpired as e:
@@ -120,13 +202,17 @@ def _invoke_codex(
 
 
 def _load_run_artifacts(
-    *, work_dir: str, response_path: str
+    *, work_dir: str, response_path: str, raw_stdout: str
 ) -> tuple[str, dict | None, str, str]:
-    """Load all artifacts expected from a codex run."""
+    """Load all artifacts expected from an agent run."""
     code = _read(os.path.join(work_dir, "solution.py"))
     result_data = _read_json(os.path.join(work_dir, "result.json"))
     exploration = _read(os.path.join(work_dir, "exploration.md")).strip()
     hypothesis = _read(response_path).strip()
+    if not hypothesis:
+        hypothesis = _extract_response_text(raw_stdout).strip()
+        if hypothesis:
+            _write(response_path, hypothesis)
     return code, result_data, exploration, hypothesis
 
 
@@ -137,41 +223,63 @@ def _metric_from_result(result_data: dict | None) -> float | None:
 
 
 def _build_command(
-    work_dir: str, response_path: str, *, model: str | None
+    work_dir: str,
+    response_path: str,
+    *,
+    model: str | None,
+    cli: AgentCLIConfig | None = None,
+    prompt: str | None = None,
 ) -> list[str]:
-    """Build codex CLI invocation with robust local-access defaults."""
-    access_mode = os.getenv("AGLEARN_CODEX_ACCESS_MODE", "bypass").strip().lower()
-
-    cmd = [
-        "codex",
-        "exec",
-        "--ephemeral",
-        "--skip-git-repo-check",
-        "--json",
-        "-C",
-        work_dir,
-        "-o",
-        response_path,
-    ]
-    if access_mode in {"full-auto", "sandbox"}:
-        cmd[2:2] = ["--full-auto", "--sandbox", "danger-full-access"]
-    else:
-        # Default to bypass mode to prevent sandbox_apply failures in restricted runtimes.
-        cmd.insert(2, "--dangerously-bypass-approvals-and-sandbox")
-
+    """Build an agent CLI invocation."""
+    cli_config = cli or codex_cli_config()
+    cmd = [cli_config.program]
+    cmd.extend(
+        _format_args(
+            cli_config.args_before_model,
+            work_dir=work_dir,
+            response_path=response_path,
+        )
+    )
     if model:
-        cmd.extend(["-m", model])
-    cmd.append("-")  # read prompt from stdin
+        cmd.extend(
+            _format_args(
+                cli_config.model_flag,
+                work_dir=work_dir,
+                response_path=response_path,
+            )
+        )
+        cmd.append(model)
+    cmd.extend(
+        _format_args(
+            cli_config.args_after_model,
+            work_dir=work_dir,
+            response_path=response_path,
+        )
+    )
+    if cli_config.prompt_mode == "arg":
+        if prompt is None:
+            raise ValueError("prompt is required when prompt_mode='arg'")
+        cmd.extend(
+            _format_args(
+                cli_config.prompt_flag,
+                work_dir=work_dir,
+                response_path=response_path,
+            )
+        )
+        cmd.append(prompt)
     return cmd
 
 
-def _build_run_env() -> dict[str, str]:
+def _build_run_env(*, cli: AgentCLIConfig | None = None) -> dict[str, str]:
     env = os.environ.copy()
     env.setdefault("LOKY_MAX_CPU_COUNT", "1")
     env.setdefault("OMP_NUM_THREADS", "1")
     env.setdefault("OPENBLAS_NUM_THREADS", "1")
     env.setdefault("MKL_NUM_THREADS", "1")
     env.setdefault("NUMEXPR_NUM_THREADS", "1")
+    if cli:
+        for key, value in cli.env.items():
+            env[key] = value
     return env
 
 
@@ -219,6 +327,7 @@ def _run_solution_fallback(work_dir: str, *, timeout: int) -> tuple[float | None
 
 def _fallback_hypothesis(
     *,
+    runner_name: str,
     timed_out: bool,
     timeout: int,
     return_code: int | None,
@@ -229,15 +338,82 @@ def _fallback_hypothesis(
     if metric is not None and fallback_note:
         return fallback_note
     if timed_out:
-        return f"codex exec timed out after {timeout}s."
+        return f"{runner_name} timed out after {timeout}s."
     if return_code not in (None, 0):
         err_line = _last_nonempty_line(stderr)
         if err_line:
-            return f"codex exec failed (exit {return_code}): {err_line[:240]}"
-        return f"codex exec failed with exit code {return_code}."
+            return f"{runner_name} failed (exit {return_code}): {err_line[:240]}"
+        return f"{runner_name} failed with exit code {return_code}."
     if fallback_note:
         return fallback_note
-    return "codex exec did not produce a hypothesis."
+    return f"{runner_name} did not produce a hypothesis."
+
+
+def _format_args(
+    args: tuple[str, ...],
+    *,
+    work_dir: str,
+    response_path: str,
+) -> list[str]:
+    response_file = os.path.basename(response_path)
+    return [
+        arg.format(
+            work_dir=work_dir,
+            response_path=response_path,
+            response_file=response_file,
+        )
+        for arg in args
+    ]
+
+
+def _extract_response_text(stdout: str) -> str:
+    stripped = stdout.strip()
+    if not stripped:
+        return ""
+
+    payloads: list[object] = []
+    try:
+        payloads.append(json.loads(stripped))
+    except json.JSONDecodeError:
+        pass
+
+    for line in reversed(stripped.splitlines()):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            payloads.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+
+    for payload in payloads:
+        text = _extract_text_from_payload(payload)
+        if text:
+            return text.strip()
+
+    return stripped
+
+
+def _extract_text_from_payload(payload: object) -> str:
+    if isinstance(payload, str):
+        return payload
+    if isinstance(payload, list):
+        parts = [_extract_text_from_payload(item) for item in payload]
+        return "\n".join(part for part in parts if part)
+    if not isinstance(payload, dict):
+        return ""
+
+    if payload.get("type") == "text":
+        text = payload.get("text")
+        return text if isinstance(text, str) else ""
+
+    for key in ("result", "output", "message", "content", "text", "response"):
+        if key in payload:
+            text = _extract_text_from_payload(payload[key])
+            if text:
+                return text
+
+    return ""
 
 
 def _metric_from_stdout(stdout: str) -> float | None:

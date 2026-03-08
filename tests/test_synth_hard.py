@@ -7,7 +7,7 @@ import tempfile
 import numpy as np
 import pandas as pd
 
-from aglearn.synth_hard import (
+from aglearn.data.synth_hard import (
     HardSyntheticTask,
     generate_high_dim,
     generate_multiclass,

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import aglearn.loop as loop
+import aglearn.runtime.loop as loop
 
 
 def test_evolve_starts_from_clean_output_dir(tmp_path: Path, monkeypatch):
@@ -42,8 +42,9 @@ def test_evolve_starts_from_clean_output_dir(tmp_path: Path, monkeypatch):
         *,
         model: str | None = None,
         timeout: int = loop.DEFAULT_TIMEOUT_SECONDS,
+        cli=None,
     ) -> dict[str, object]:
-        del model, timeout
+        del model, timeout, cli
         prompts.append(prompt)
         work_path = Path(work_dir)
         if work_path.name == "_report":
@@ -101,3 +102,60 @@ def test_evolve_starts_from_clean_output_dir(tmp_path: Path, monkeypatch):
         (tmp_path / "journal.jsonl").read_text(encoding="utf-8").strip().splitlines()
     )
     assert len(journal_lines) == 1
+
+
+def test_evolve_can_use_external_evaluator(tmp_path: Path, monkeypatch):
+    def fake_run(
+        prompt: str,
+        work_dir: str,
+        *,
+        model: str | None = None,
+        timeout: int = loop.DEFAULT_TIMEOUT_SECONDS,
+        cli=None,
+    ) -> dict[str, object]:
+        del prompt, model, timeout, cli
+        work_path = Path(work_dir)
+        if work_path.name == "_report":
+            return {
+                "code": "",
+                "hypothesis": "",
+                "exploration": "",
+                "metric_value": None,
+                "is_buggy": True,
+                "stdout": "",
+                "stderr": "",
+            }
+        (work_path / "solution.py").write_text("print('x')\n", encoding="utf-8")
+        (work_path / "submission.csv").write_text(
+            "row_id,target\n1,1\n", encoding="utf-8"
+        )
+        return {
+            "code": "print('x')\n",
+            "hypothesis": "self reported",
+            "exploration": "",
+            "metric_value": 0.1,
+            "is_buggy": False,
+            "stdout": "",
+            "stderr": "",
+        }
+
+    monkeypatch.setattr(loop.agent, "run", fake_run)
+
+    best = loop.evolve(
+        loop.TaskConfig(
+            description="demo",
+            data_path="/tmp/data.csv",
+            target_column="target",
+            metric="f1",
+            resource_paths={"test_data": "/tmp/test.csv"},
+        ),
+        max_steps=1,
+        output_dir=str(tmp_path),
+        evaluator=lambda work_dir, result: loop.EvaluationResult(
+            metric_value=0.9,
+            is_buggy=False,
+        ),
+    )
+
+    assert best is not None
+    assert best.metric_value == 0.9

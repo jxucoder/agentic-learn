@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from aglearn.journal import Experiment, Journal
+from aglearn.storage.journal import Experiment, Journal
 
 
 def test_journal_accepts_relative_filename_path(tmp_path, monkeypatch):

@@ -46,24 +46,24 @@ Without it, the agent collapses into incremental hyperparameter tweaks. The brie
 
 ## Quickstart
 
-**Prerequisites:** [Codex CLI](https://github.com/openai/codex) installed and authenticated, Python ≥ 3.11.
+**Prerequisites:** Python ≥ 3.11 and at least one supported agent CLI installed.
+The core loop defaults to [Codex CLI](https://github.com/openai/codex), and the experiment scripts can also use Gemini CLI for benchmark brief generation plus Claude Code or Codex OSS-backed local models in the arena.
 
 ```bash
-python -m venv .venv && source .venv/bin/activate
-pip install -e .
+uv sync --dev
 ```
 
 ```python
 from aglearn import TaskConfig, evolve
 
 task = TaskConfig(
-    description="Binary classification: predict survival on the Titanic.",
-    data_path="/path/to/titanic.csv",
-    target_column="Survived",
-    metric="f1_score",
+    description="Tabular classification on a generated training split.",
+    data_path="/path/to/train.csv",
+    target_column="target",
+    metric="f1",
 )
 
-best = evolve(task, model="codex-mini", max_steps=10)
+best = evolve(task, model="gpt-5-codex", max_steps=10)
 print(best.metric_value)
 ```
 
@@ -71,35 +71,50 @@ The best solution is saved to `./output/best_solution.py`. Full history lives in
 
 ---
 
+## Core vs Experiments
+
+`aglearn` is now the reusable core package: runtime CLI invocation, journaling, and the evolve loop.
+Benchmark generation, Gemini-written Kaggle prompts, and model-vs-model arena runs live in the separate `aglearn_experiments` package plus repo scripts.
+
+```bash
+uv run python experiments/generate_setup.py --task-type multiclass --seed 42
+uv run python experiments/run_arena.py \
+  --manifest experiments/generated/multiclass-seed-42/manifest.json \
+  --contestants experiments/configs/contestants.example.json
+```
+
+The arena runner evaluates `submission.csv` against the hidden solution file instead of trusting each model's self-reported cross-validation metric.
+
+---
+
 ## Configuration
 
 | Parameter | Default | Description |
 |---|---|---|
-| `model` | `codex-mini` | Model passed to `codex exec -m` |
+| `model` | `codex-mini` | Model passed to the configured CLI runner |
 | `max_steps` | `10` | Number of agent invocations |
 | `timeout` | `300` | Seconds before an agent run is killed |
 | `output_dir` | `./output` | Where journal and step dirs are written |
 | `task.instructions` | `""` | Optional human steering (free text) |
+| `task.resource_paths` | `{}` | Extra files exposed to the agent, such as hidden-test inputs or sample submissions |
 
 ---
 
-## Benchmarks
+## Experiment Setups
 
-### ⚠️ Synthetic benchmarks (recommended)
-
-Public datasets like Titanic and California Housing are in LLM training data. Use synthetic benchmarks for honest evaluation.
-
-```bash
-python examples/synth_classification.py --seed 42 --steps 10
-python examples/synth_regression.py --seed 42 --steps 10
-```
-
-Each synthetic run now writes a Kaggle-style bundle in `data/`:
+Use Gemini to generate public competition-style setups on top of synthetic data bundles. Each generated setup writes a Kaggle-style bundle under `experiments/generated/<slug>/data/`:
 - `synth_<name>_train.csv` (labeled train split, used by the agent)
 - `synth_<name>_test.csv` (unlabeled test split)
 - `synth_<name>_sample_submission.csv`
 - `synth_<name>_solution.csv` (hidden labels for offline evaluation)
 - `synth_<name>_meta.json` (paths + generation details)
+- `challenge.md` (Gemini-written public problem statement)
+- `manifest.json` (machine-readable setup for the arena)
+
+```bash
+uv run python experiments/generate_setup.py --task-type multiclass --seed 42
+uv run python experiments/generate_setup.py --task-type temporal_regression --seed 123
+```
 
 ```mermaid
 graph LR
@@ -116,12 +131,7 @@ graph LR
     style R2 fill:#b3ffb3,stroke:#009900,stroke-width:3px
 ```
 
-### Legacy benchmarks (public data — may have knowledge leakage)
-
-| Task | Metric | Baseline | After 10 steps | Run |
-|---|---|---|---|---|
-| Titanic (binary clf) | F1 | ~0.62 | ~0.82+ | `python examples/titanic.py` |
-| California Housing (regression) | R² | ~0.55 | ~0.85+ | `python examples/california_housing.py` |
+Generated setups are the intended benchmark surface. Fixed public-data tasks and hand-authored benchmark launchers have been removed to avoid leakage-prone baselines becoming part of the default workflow.
 
 ---
 
@@ -144,19 +154,28 @@ flowchart LR
 
 ## Project Structure
 
-```
+``` 
 src/aglearn/
-├── __init__.py      # Exports: TaskConfig, evolve, Journal, Experiment
-├── journal.py       # Experiment dataclass + append-only Journal
-├── agent.py         # Codex exec wrapper
-├── loop.py          # Briefing builder + evolve loop
-└── synth.py         # Synthetic Kaggle-style dataset generator
+├── __init__.py         # Public package exports
+├── runtime/
+│   ├── agent.py        # CLI runner configs + agent invocation
+│   └── loop.py         # Briefing builder + evolve loop
+├── storage/
+│   └── journal.py      # Experiment dataclass + append-only Journal
+├── data/
+│   ├── synth.py        # Synthetic Kaggle-style dataset generator
+│   └── synth_hard.py   # Harder synthetic benchmark generators
 
-examples/
-├── synth_classification.py   # Synthetic binary classification (recommended)
-├── synth_regression.py       # Synthetic regression (recommended)
-├── titanic.py                # Titanic (public data — legacy)
-└── california_housing.py     # California Housing (public data — legacy)
+src/aglearn_experiments/
+├── benchmarks.py       # Gemini-briefed Kaggle benchmark generation
+└── arena.py            # Multi-model hidden-test leaderboard runner
+
+experiments/
+├── generate_setup.py         # Gemini-backed experiment setup generator
+├── run_arena.py              # Multi-model competition runner
+├── configs/
+│   └── contestants.example.json
+└── generated/                # Created on demand
 ```
 
 ---

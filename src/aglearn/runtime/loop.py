@@ -10,13 +10,20 @@ import logging
 import os
 import shutil
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Callable
 
 from . import agent
-from .journal import Experiment, Journal
+from ..storage.journal import Experiment, Journal
 
 log = logging.getLogger(__name__)
 DEFAULT_TIMEOUT_SECONDS = 600
+
+
+@dataclass(frozen=True)
+class EvaluationResult:
+    metric_value: float | None
+    is_buggy: bool = False
 
 
 @dataclass
@@ -28,6 +35,7 @@ class TaskConfig:
     target_column: str
     metric: str = "accuracy"
     instructions: str = ""  # optional human steering
+    resource_paths: dict[str, str] = field(default_factory=dict)
 
 
 def evolve(
@@ -37,6 +45,8 @@ def evolve(
     max_steps: int = 10,
     timeout: int = DEFAULT_TIMEOUT_SECONDS,
     output_dir: str = "./output",
+    cli: agent.AgentCLIConfig | None = None,
+    evaluator: Callable[[str, agent.AgentRunResult], EvaluationResult] | None = None,
 ) -> Experiment | None:
     """Run the evolve loop."""
     _prepare_output_dir(output_dir)
@@ -53,14 +63,20 @@ def evolve(
         os.makedirs(work_dir, exist_ok=True)
 
         prompt = _briefing(task, journal)
-        result = agent.run(prompt, work_dir, model=model, timeout=timeout)
+        result = agent.run(prompt, work_dir, model=model, timeout=timeout, cli=cli)
+        metric_value = result["metric_value"]
+        is_buggy = result["is_buggy"]
+        if evaluator is not None:
+            evaluation = evaluator(work_dir, result)
+            metric_value = evaluation.metric_value
+            is_buggy = evaluation.is_buggy
 
         exp = Experiment(
             code=result["code"],
             hypothesis=result["hypothesis"],
             exploration=result.get("exploration", ""),
-            metric_value=result["metric_value"],
-            is_buggy=result["is_buggy"],
+            metric_value=metric_value,
+            is_buggy=is_buggy,
             stdout=result.get("stdout", ""),
             stderr=result.get("stderr", ""),
         )
@@ -78,7 +94,7 @@ def evolve(
     else:
         log.warning("done | no successful solutions after %d steps", max_steps)
 
-    _generate_report(task, journal, output_dir, model=model, timeout=timeout)
+    _generate_report(task, journal, output_dir, model=model, timeout=timeout, cli=cli)
 
     return best
 
@@ -98,6 +114,14 @@ def _briefing(task: TaskConfig, journal: Journal) -> str:
 
     if task.instructions:
         parts.append(f"Additional instructions: {task.instructions}")
+
+    if task.resource_paths:
+        resource_lines = "\n".join(
+            f"- {name}: {path}" for name, path in sorted(task.resource_paths.items())
+        )
+        parts.append(
+            "Additional files available to use during the task:\n" + resource_lines
+        )
 
     parts.append(f"What has been tried so far (best first):\n{journal.summary()}")
 
@@ -135,6 +159,7 @@ def _generate_report(
     *,
     model: str | None = None,
     timeout: int = DEFAULT_TIMEOUT_SECONDS,
+    cli: agent.AgentCLIConfig | None = None,
 ) -> None:
     """Run the agent to analyze all artifacts and write a research report."""
     if journal.count() == 0:
@@ -146,7 +171,7 @@ def _generate_report(
     report_work_dir, report_path = _prepare_report_workspace(output_dir)
 
     prompt = _report_briefing(task, journal, output_dir)
-    agent.run(prompt, report_work_dir, model=model, timeout=timeout)
+    agent.run(prompt, report_work_dir, model=model, timeout=timeout, cli=cli)
 
     # Move report.md to output root if the agent wrote it
     src = os.path.join(report_work_dir, "report.md")
@@ -208,6 +233,16 @@ def _report_briefing(task: TaskConfig, journal: Journal, output_dir: str) -> str
         "names, and model parameters. This is a research artifact, not a\n"
         "summary. Write it as report.md.",
     ]
+
+    if task.resource_paths:
+        parts.insert(
+            2,
+            "Additional task files:\n"
+            + "\n".join(
+                f"  {name}: {path}"
+                for name, path in sorted(task.resource_paths.items())
+            ),
+        )
 
     return "\n\n".join(parts)
 

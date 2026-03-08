@@ -1,0 +1,20 @@
+{
+  "agents": [
+    {
+      "name": "codex-gpt5",
+      "provider": "codex",
+      "model": "gpt-5-codex"
+    },
+    {
+      "name": "claude-sonnet",
+      "provider": "claude",
+      "model": "sonnet"
+    },
+    {
+      "name": "qwen-coder-32b",
+      "provider": "codex-oss",
+      "model": "qwen2.5-coder:32b",
+      "local_provider": "ollama"
+    }
+  ]
+}

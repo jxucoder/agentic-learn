@@ -1,11 +1,11 @@
-"""Unit tests for aglearn.agent helper behavior."""
+"""Unit tests for aglearn.runtime.agent helper behavior."""
 
 from __future__ import annotations
 
 import json
 from pathlib import Path
 
-from aglearn import agent
+from aglearn.runtime import agent
 
 
 def test_build_command_defaults_to_bypass(monkeypatch):
@@ -23,6 +23,32 @@ def test_build_command_full_auto_mode(monkeypatch):
     assert "danger-full-access" in cmd
     assert "--dangerously-bypass-approvals-and-sandbox" not in cmd
     assert cmd[-3:] == ["-m", "foo", "-"]
+
+
+def test_build_command_supports_arg_prompt_mode():
+    cli = agent.AgentCLIConfig(
+        name="custom",
+        program="runner",
+        args_before_model=("--json",),
+        model_flag=("--model",),
+        prompt_mode="arg",
+        prompt_flag=("--prompt",),
+    )
+    cmd = agent._build_command(
+        "/tmp/work",
+        "/tmp/work/.agent_response.md",
+        model="demo-model",
+        cli=cli,
+        prompt="hello world",
+    )
+    assert cmd == [
+        "runner",
+        "--json",
+        "--model",
+        "demo-model",
+        "--prompt",
+        "hello world",
+    ]
 
 
 def test_metric_from_stdout_uses_last_json_metric():
@@ -60,7 +86,7 @@ def test_run_clears_stale_artifacts_before_loading_results(tmp_path: Path, monke
 
     monkeypatch.setattr(
         agent,
-        "_invoke_codex",
+        "_invoke_agent",
         lambda **kwargs: ("", "simulated failure", 1, False),
     )
 
@@ -70,7 +96,7 @@ def test_run_clears_stale_artifacts_before_loading_results(tmp_path: Path, monke
     assert result["exploration"] == ""
     assert result["metric_value"] is None
     assert result["is_buggy"] is True
-    assert result["hypothesis"] == "codex exec failed (exit 1): simulated failure"
+    assert result["hypothesis"] == "codex failed (exit 1): simulated failure"
 
 
 def test_as_float_rejects_non_finite_metrics():
@@ -78,3 +104,8 @@ def test_as_float_rejects_non_finite_metrics():
     assert agent._as_float("NaN") is None
     assert agent._as_float(float("inf")) is None
     assert agent._as_float("-inf") is None
+
+
+def test_extract_response_text_handles_json_payload():
+    stdout = json.dumps({"result": {"content": [{"type": "text", "text": "ok"}]}})
+    assert agent._extract_response_text(stdout) == "ok"
