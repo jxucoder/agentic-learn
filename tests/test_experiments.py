@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
 from aglearn.runtime.loop import EvaluationResult
 from aglearn_experiments.arena import (
@@ -14,7 +17,7 @@ from aglearn_experiments.arena import (
     build_submission_evaluator,
     run_arena,
 )
-from aglearn_experiments.benchmarks import generate_benchmark
+from aglearn_experiments.benchmarks import _parse_brief_payload, generate_benchmark
 
 
 def test_generate_benchmark_writes_manifest_and_challenge(tmp_path: Path):
@@ -24,11 +27,12 @@ def test_generate_benchmark_writes_manifest_and_challenge(tmp_path: Path):
         samples=200,
         noise=0.2,
         output_root=str(tmp_path),
+        theme="Mars housing price",
         brief_generator=lambda prompt, model, cwd: (
             {
-                "title": "Synthetic Employee Signals",
-                "short_description": "Hard multiclass benchmark.",
-                "scenario": "Predict a hidden workforce outcome.",
+                "title": "Mars Habitat Price Forecasting",
+                "short_description": "Hard multiclass benchmark for Mars housing markets.",
+                "scenario": "Predict a hidden outcome in a Martian real-estate pricing dataset.",
                 "objective": "Maximize macro F1.",
                 "data_highlights": ["Mixed numeric and categorical inputs"],
                 "modeling_challenges": ["Class imbalance"],
@@ -45,10 +49,60 @@ def test_generate_benchmark_writes_manifest_and_challenge(tmp_path: Path):
     assert manifest_path.exists()
     assert challenge_path.exists()
     payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    validator_path = Path(payload["validator_script_path"])
+    evaluation_path = Path(payload["evaluation_script_path"])
     assert payload["experiment_name"] == manifest.slug
+    assert payload["theme"] == "Mars housing price"
     assert payload["brief_source"] == "stub"
+    assert payload["submission_filename"] == "submission.csv"
+    assert Path(payload["validation_path"]).exists()
+    assert Path(payload["validation_sample_submission_path"]).exists()
     assert Path(payload["test_path"]).exists()
     assert Path(payload["sample_submission_path"]).exists()
+    assert validator_path.exists()
+    assert evaluation_path.exists()
+    challenge_text = challenge_path.read_text(encoding="utf-8")
+    assert "## Submission Format" in challenge_text
+    assert "## Public Validation" in challenge_text
+    assert "## Local Validation" in challenge_text
+    assert (
+        "uv run python validate_submission.py --submission submission.csv"
+        in challenge_text
+    )
+    assert (
+        "uv run python evaluate_validation.py --submission validation_submission.csv"
+        in challenge_text
+    )
+    validation = subprocess.run(
+        [
+            sys.executable,
+            str(validator_path),
+            "--submission",
+            payload["sample_submission_path"],
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert validation.returncode == 0, validation.stdout + validation.stderr
+    validation_frame = pd.read_csv(payload["validation_path"])
+    validation_submission_path = Path(tmp_path) / "validation_submission.csv"
+    validation_frame[["row_id", "target"]].to_csv(
+        validation_submission_path, index=False
+    )
+    evaluation = subprocess.run(
+        [
+            sys.executable,
+            str(evaluation_path),
+            "--submission",
+            str(validation_submission_path),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert evaluation.returncode == 0, evaluation.stdout + evaluation.stderr
+    assert json.loads(evaluation.stdout)["metric"] == 1.0
 
 
 def test_generate_benchmark_uses_random_two_word_name(tmp_path: Path):
@@ -76,6 +130,85 @@ def test_generate_benchmark_uses_random_two_word_name(tmp_path: Path):
     parts = manifest.experiment_name.split("-")
     assert len(parts) == 2
     assert all(parts)
+
+
+def test_generate_benchmark_theme_flows_into_fallback_brief(tmp_path: Path):
+    manifest = generate_benchmark(
+        task_type="regression",
+        seed=5,
+        samples=120,
+        noise=0.1,
+        output_root=str(tmp_path),
+        experiment_name="mars-housing-price",
+        theme="Mars housing price",
+        allow_fallback=True,
+        brief_generator=lambda prompt, model, cwd: (_ for _ in ()).throw(
+            RuntimeError("force fallback")
+        ),
+    )
+
+    challenge = Path(manifest.challenge_markdown_path).read_text(encoding="utf-8")
+    assert "Mars Housing Price" in challenge
+
+
+def test_generate_benchmark_requires_gemini_success_by_default(tmp_path: Path):
+    with pytest.raises(RuntimeError, match="Gemini brief generation failed"):
+        generate_benchmark(
+            task_type="regression",
+            seed=5,
+            samples=120,
+            noise=0.1,
+            output_root=str(tmp_path),
+            experiment_name="mars-housing-price",
+            theme="Mars housing price",
+            brief_generator=lambda prompt, model, cwd: (_ for _ in ()).throw(
+                RuntimeError("force failure")
+            ),
+        )
+
+
+def test_generate_benchmark_rejects_generic_brief_for_themed_setup(tmp_path: Path):
+    with pytest.raises(RuntimeError, match="did not reflect the requested theme"):
+        generate_benchmark(
+            task_type="regression",
+            seed=5,
+            samples=120,
+            noise=0.1,
+            output_root=str(tmp_path),
+            experiment_name="mars-housing-price",
+            theme="Mars housing price",
+            brief_generator=lambda prompt, model, cwd: (
+                {
+                    "title": "Regression Benchmark",
+                    "short_description": "A hard Kaggle-style tabular benchmark.",
+                    "scenario": "You are competing on a tabular prediction task.",
+                    "objective": "Maximize r2.",
+                    "data_highlights": ["A"],
+                    "modeling_challenges": ["B"],
+                    "submission_requirements": ["C"],
+                    "evaluation_summary": "Hidden leaderboard uses r2.",
+                },
+                "stub",
+            ),
+        )
+
+
+def test_parse_brief_payload_unwraps_fenced_json_from_response_envelope():
+    payload = _parse_brief_payload(
+        json.dumps(
+            {
+                "session_id": "abc",
+                "response": (
+                    "```json\n"
+                    '{"title":"Mars Housing Price Challenge","scenario":"Predict Mars home values."}\n'
+                    "```"
+                ),
+            }
+        )
+    )
+
+    assert payload["title"] == "Mars Housing Price Challenge"
+    assert payload["scenario"] == "Predict Mars home values."
 
 
 def test_submission_evaluator_scores_hidden_solution(tmp_path: Path):
@@ -128,6 +261,12 @@ def test_run_arena_uses_private_contestant_workspaces(tmp_path: Path, monkeypatc
     pd.DataFrame({"row_id": [1, 2], "target": [0, 1]}).to_csv(
         manifest_dir / "train.csv", index=False
     )
+    pd.DataFrame({"row_id": [11, 12], "target": [1, 0]}).to_csv(
+        manifest_dir / "validation.csv", index=False
+    )
+    pd.DataFrame({"row_id": [11, 12], "target": [0, 0]}).to_csv(
+        manifest_dir / "validation_sample.csv", index=False
+    )
     pd.DataFrame({"row_id": [3, 4]}).to_csv(manifest_dir / "test.csv", index=False)
     pd.DataFrame({"row_id": [3, 4], "target": [0, 1]}).to_csv(
         manifest_dir / "solution.csv", index=False
@@ -144,9 +283,19 @@ def test_run_arena_uses_private_contestant_workspaces(tmp_path: Path, monkeypatc
                 "public_description": "demo",
                 "agent_instructions": "write submission.csv",
                 "train_path": str((manifest_dir / "train.csv").resolve()),
+                "validation_path": str((manifest_dir / "validation.csv").resolve()),
+                "validation_sample_submission_path": str(
+                    (manifest_dir / "validation_sample.csv").resolve()
+                ),
                 "test_path": str((manifest_dir / "test.csv").resolve()),
                 "sample_submission_path": str((manifest_dir / "sample.csv").resolve()),
                 "solution_path": str((manifest_dir / "solution.csv").resolve()),
+                "evaluation_script_path": str(
+                    (manifest_dir / "evaluate_validation.py").resolve()
+                ),
+                "validator_script_path": str(
+                    (manifest_dir / "validate_submission.py").resolve()
+                ),
                 "target_column": "target",
                 "metric": "f1",
             }
@@ -165,6 +314,12 @@ def test_run_arena_uses_private_contestant_workspaces(tmp_path: Path, monkeypatc
         ),
         encoding="utf-8",
     )
+    (manifest_dir / "validate_submission.py").write_text(
+        "print('ok')\n", encoding="utf-8"
+    )
+    (manifest_dir / "evaluate_validation.py").write_text(
+        "print('ok')\n", encoding="utf-8"
+    )
 
     def fake_evolve(task, **kwargs):
         output_dir = Path(kwargs["output_dir"])
@@ -172,6 +327,10 @@ def test_run_arena_uses_private_contestant_workspaces(tmp_path: Path, monkeypatc
         assert task.data_path.startswith(str(output_dir))
         for resource_path in task.resource_paths.values():
             assert resource_path.startswith(str(output_dir))
+        assert "submission_validator" in task.resource_paths
+        assert "validation_data" in task.resource_paths
+        assert "validation_sample_submission" in task.resource_paths
+        assert "validation_evaluator" in task.resource_paths
         (output_dir / "submission.csv").write_text(
             "row_id,target\n3,0\n4,1\n", encoding="utf-8"
         )

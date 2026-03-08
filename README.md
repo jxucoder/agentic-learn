@@ -104,12 +104,19 @@ The arena runner evaluates `submission.csv` against the hidden solution file ins
 
 Use Gemini to generate public competition-style setups on top of synthetic data bundles. If you omit `--name`, each setup gets a random two-word experiment name. Each generated setup writes a Kaggle-style bundle under `experiments/generated/<slug>/data/`:
 - `synth_<name>_train.csv` (labeled train split, used by the agent)
+- `synth_<name>_validation.csv` (labeled public validation split)
+- `synth_<name>_validation_sample_submission.csv` (prediction template for the validation split)
 - `synth_<name>_test.csv` (unlabeled test split)
 - `synth_<name>_sample_submission.csv`
 - `synth_<name>_solution.csv` (hidden labels for offline evaluation)
 - `synth_<name>_meta.json` (paths + generation details)
 - `challenge.md` (Gemini-written public problem statement)
+- `validate_submission.py` (public schema/row-coverage validator for `submission.csv`)
+- `evaluate_validation.py` (public scorer for the validation split)
 - `manifest.json` (machine-readable setup for the arena)
+
+When `--gemini-model` is omitted, the generator inspects the installed Gemini CLI package and prefers the newest locally available model first. On this machine that means `gemini-3-pro-preview` before stable fallbacks like `gemini-2.5-pro`.
+By default, setup generation is Gemini-only: if Gemini CLI cannot produce the brief, the command fails instead of silently falling back. Use `--allow-template-fallback` only for offline debugging.
 
 ```bash
 uv run python experiments/generate_setup.py --task-type multiclass --seed 42

@@ -149,8 +149,14 @@ def run_arena(
             metric=manifest["metric"],
             instructions=manifest["agent_instructions"],
             resource_paths={
+                "validation_data": workspace_paths["validation_path"],
+                "validation_sample_submission": workspace_paths[
+                    "validation_sample_submission_path"
+                ],
+                "validation_evaluator": workspace_paths["evaluation_script_path"],
                 "test_data": workspace_paths["test_path"],
                 "sample_submission": workspace_paths["sample_submission_path"],
+                "submission_validator": workspace_paths["validator_script_path"],
                 "challenge": workspace_paths["challenge_markdown_path"],
             },
         )
@@ -273,13 +279,27 @@ def _prepare_contestant_workspace(
     if run_dir.exists():
         shutil.rmtree(run_dir)
     inputs_dir = run_dir / "inputs"
+    inputs_data_dir = inputs_dir / "data"
     inputs_dir.mkdir(parents=True, exist_ok=True)
+    inputs_data_dir.mkdir(parents=True, exist_ok=True)
 
     copied_paths = {
-        "train_path": _copy_input(Path(manifest["train_path"]), inputs_dir),
-        "test_path": _copy_input(Path(manifest["test_path"]), inputs_dir),
+        "train_path": _copy_input(Path(manifest["train_path"]), inputs_data_dir),
+        "validation_path": _copy_input(
+            Path(manifest["validation_path"]), inputs_data_dir
+        ),
+        "validation_sample_submission_path": _copy_input(
+            Path(manifest["validation_sample_submission_path"]), inputs_data_dir
+        ),
+        "test_path": _copy_input(Path(manifest["test_path"]), inputs_data_dir),
         "sample_submission_path": _copy_input(
-            Path(manifest["sample_submission_path"]), inputs_dir
+            Path(manifest["sample_submission_path"]), inputs_data_dir
+        ),
+        "evaluation_script_path": _copy_input(
+            Path(manifest["evaluation_script_path"]), inputs_dir
+        ),
+        "validator_script_path": _copy_input(
+            Path(manifest["validator_script_path"]), inputs_dir
         ),
         "challenge_markdown_path": _write_text_file(
             inputs_dir / "challenge.md",
