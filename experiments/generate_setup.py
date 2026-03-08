@@ -26,6 +26,7 @@ def main() -> None:
     parser.add_argument("--noise", type=float, default=0.2)
     parser.add_argument("--output-root", default="experiments/generated")
     parser.add_argument("--gemini-model")
+    parser.add_argument("--name")
     args = parser.parse_args()
 
     manifest = generate_benchmark(
@@ -35,6 +36,7 @@ def main() -> None:
         noise=args.noise,
         output_root=args.output_root,
         gemini_model=args.gemini_model,
+        experiment_name=args.name,
     )
 
     print(json.dumps(manifest.to_dict(), indent=2))

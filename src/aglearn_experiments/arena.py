@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -133,23 +134,26 @@ def run_arena(
     evaluator = build_submission_evaluator(manifest)
 
     benchmark_output = Path(output_root).resolve() / manifest["slug"]
+    private_root = benchmark_output / ".private_runs"
     benchmark_output.mkdir(parents=True, exist_ok=True)
-
-    task = TaskConfig(
-        description=manifest["public_description"],
-        data_path=manifest["train_path"],
-        target_column=manifest["target_column"],
-        metric=manifest["metric"],
-        instructions=manifest["agent_instructions"],
-        resource_paths={
-            "test_data": manifest["test_path"],
-            "sample_submission": manifest["sample_submission_path"],
-        },
-    )
+    private_root.mkdir(parents=True, exist_ok=True)
 
     results: list[dict[str, Any]] = []
     for contestant in contestants:
-        run_dir = benchmark_output / contestant.name
+        run_dir = private_root / contestant.name
+        workspace_paths = _prepare_contestant_workspace(run_dir, manifest=manifest)
+        task = TaskConfig(
+            description=manifest["public_description"],
+            data_path=workspace_paths["train_path"],
+            target_column=manifest["target_column"],
+            metric=manifest["metric"],
+            instructions=manifest["agent_instructions"],
+            resource_paths={
+                "test_data": workspace_paths["test_path"],
+                "sample_submission": workspace_paths["sample_submission_path"],
+                "challenge": workspace_paths["challenge_markdown_path"],
+            },
+        )
         started = time.time()
         best = evolve(
             task,
@@ -191,9 +195,14 @@ def run_arena(
 
 def _resolve_cli(contestant: ContestantSpec) -> AgentCLIConfig:
     if contestant.provider == "codex":
-        return codex_cli_config()
+        return codex_cli_config(access_mode="sandbox", sandbox_mode="workspace-write")
     if contestant.provider == "codex-oss":
-        return codex_cli_config(oss=True, local_provider=contestant.local_provider)
+        return codex_cli_config(
+            oss=True,
+            local_provider=contestant.local_provider,
+            access_mode="sandbox",
+            sandbox_mode="workspace-write",
+        )
     if contestant.provider == "claude":
         return claude_cli_config()
     if contestant.provider == "custom":
@@ -254,3 +263,41 @@ def _write_leaderboard(output_dir: Path, leaderboard: dict[str, Any]) -> None:
     (output_dir / "leaderboard.md").write_text(
         "\n".join(lines) + "\n", encoding="utf-8"
     )
+
+
+def _prepare_contestant_workspace(
+    run_dir: Path,
+    *,
+    manifest: dict[str, Any],
+) -> dict[str, str]:
+    if run_dir.exists():
+        shutil.rmtree(run_dir)
+    inputs_dir = run_dir / "inputs"
+    inputs_dir.mkdir(parents=True, exist_ok=True)
+
+    copied_paths = {
+        "train_path": _copy_input(Path(manifest["train_path"]), inputs_dir),
+        "test_path": _copy_input(Path(manifest["test_path"]), inputs_dir),
+        "sample_submission_path": _copy_input(
+            Path(manifest["sample_submission_path"]), inputs_dir
+        ),
+        "challenge_markdown_path": _write_text_file(
+            inputs_dir / "challenge.md",
+            manifest["public_description"],
+        ),
+    }
+    _write_text_file(
+        inputs_dir / "contestant_manifest.json", json.dumps(manifest, indent=2)
+    )
+    return copied_paths
+
+
+def _copy_input(source: Path, target_dir: Path) -> str:
+    destination = target_dir / source.name
+    shutil.copy2(source, destination)
+    return str(destination.resolve())
+
+
+def _write_text_file(path: Path, content: str) -> str:
+    path.write_text(content, encoding="utf-8")
+    return str(path.resolve())

@@ -79,7 +79,7 @@ Benchmark generation, Gemini-written Kaggle prompts, and model-vs-model arena ru
 ```bash
 uv run python experiments/generate_setup.py --task-type multiclass --seed 42
 uv run python experiments/run_arena.py \
-  --manifest experiments/generated/multiclass-seed-42/manifest.json \
+  --manifest experiments/generated/silent-orbit/manifest.json \
   --contestants experiments/configs/contestants.example.json
 ```
 
@@ -102,7 +102,7 @@ The arena runner evaluates `submission.csv` against the hidden solution file ins
 
 ## Experiment Setups
 
-Use Gemini to generate public competition-style setups on top of synthetic data bundles. Each generated setup writes a Kaggle-style bundle under `experiments/generated/<slug>/data/`:
+Use Gemini to generate public competition-style setups on top of synthetic data bundles. If you omit `--name`, each setup gets a random two-word experiment name. Each generated setup writes a Kaggle-style bundle under `experiments/generated/<slug>/data/`:
 - `synth_<name>_train.csv` (labeled train split, used by the agent)
 - `synth_<name>_test.csv` (unlabeled test split)
 - `synth_<name>_sample_submission.csv`
@@ -115,6 +115,8 @@ Use Gemini to generate public competition-style setups on top of synthetic data 
 uv run python experiments/generate_setup.py --task-type multiclass --seed 42
 uv run python experiments/generate_setup.py --task-type temporal_regression --seed 123
 ```
+
+Arena runs are isolated per contestant under `output/arena/<slug>/.private_runs/`, and the consolidated leaderboard is published only after every contestant finishes.
 
 ```mermaid
 graph LR

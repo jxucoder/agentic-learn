@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import random
 import re
 import subprocess
 from dataclasses import asdict, dataclass
@@ -23,6 +24,7 @@ from aglearn.data import (
 
 @dataclass(frozen=True)
 class BenchmarkManifest:
+    experiment_name: str
     benchmark_id: str
     slug: str
     title: str
@@ -68,10 +70,17 @@ def generate_benchmark(
     noise: float,
     output_root: str = "experiments/generated",
     gemini_model: str | None = None,
+    experiment_name: str | None = None,
     brief_generator: BriefGenerator | None = None,
 ) -> BenchmarkManifest:
     """Generate a benchmark bundle and a Kaggle-style challenge brief."""
-    slug = f"{task_type.replace('_', '-')}-seed-{seed}"
+    output_root_path = Path(output_root).resolve()
+    chosen_name = _choose_experiment_name(
+        output_root=output_root_path,
+        seed=seed,
+        preferred_name=experiment_name,
+    )
+    slug = chosen_name
     benchmark_dir = Path(output_root).resolve() / slug
     data_dir = benchmark_dir / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
@@ -103,6 +112,7 @@ def generate_benchmark(
 
     challenge_path.write_text(public_description, encoding="utf-8")
     manifest = BenchmarkManifest(
+        experiment_name=chosen_name,
         benchmark_id=slug,
         slug=slug,
         title=normalized["title"],
@@ -519,3 +529,86 @@ def _build_agent_instructions(bundle: _Bundle) -> str:
 def _load_json(path: Path) -> dict[str, Any]:
     with path.open(encoding="utf-8") as f:
         return json.load(f)
+
+
+_ADJECTIVES = (
+    "amber",
+    "arcane",
+    "brisk",
+    "candid",
+    "cinder",
+    "clear",
+    "cobalt",
+    "crisp",
+    "ember",
+    "frozen",
+    "gentle",
+    "hidden",
+    "ivory",
+    "lunar",
+    "mellow",
+    "nimble",
+    "opal",
+    "quiet",
+    "rapid",
+    "scarlet",
+    "silent",
+    "silver",
+    "steady",
+    "velvet",
+)
+
+_NOUNS = (
+    "anchor",
+    "asteroid",
+    "beacon",
+    "brook",
+    "canyon",
+    "circuit",
+    "cloud",
+    "comet",
+    "delta",
+    "falcon",
+    "forest",
+    "harbor",
+    "matrix",
+    "meadow",
+    "nebula",
+    "orbit",
+    "otter",
+    "pine",
+    "radar",
+    "reef",
+    "signal",
+    "summit",
+    "thunder",
+    "vector",
+)
+
+
+def _choose_experiment_name(
+    *,
+    output_root: Path,
+    seed: int,
+    preferred_name: str | None,
+) -> str:
+    if preferred_name:
+        normalized = _normalize_experiment_name(preferred_name)
+        if (output_root / normalized).exists():
+            raise ValueError(f"experiment_name already exists: {normalized}")
+        return normalized
+
+    rng = random.Random(seed ^ random.SystemRandom().randrange(1 << 30))
+    for _ in range(128):
+        candidate = f"{rng.choice(_ADJECTIVES)}-{rng.choice(_NOUNS)}"
+        if not (output_root / candidate).exists():
+            return candidate
+    raise RuntimeError("Unable to allocate a unique experiment name")
+
+
+def _normalize_experiment_name(value: str) -> str:
+    normalized = re.sub(r"[^a-z0-9]+", "-", value.strip().lower())
+    normalized = re.sub(r"-{2,}", "-", normalized).strip("-")
+    if not normalized:
+        raise ValueError("experiment_name must contain letters or digits")
+    return normalized

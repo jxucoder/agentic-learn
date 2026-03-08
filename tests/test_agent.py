@@ -25,6 +25,12 @@ def test_build_command_full_auto_mode(monkeypatch):
     assert cmd[-3:] == ["-m", "foo", "-"]
 
 
+def test_codex_cli_config_accepts_workspace_sandbox():
+    cli = agent.codex_cli_config(access_mode="sandbox", sandbox_mode="workspace-write")
+    assert "--sandbox" in cli.args_before_model
+    assert "workspace-write" in cli.args_before_model
+
+
 def test_build_command_supports_arg_prompt_mode():
     cli = agent.AgentCLIConfig(
         name="custom",

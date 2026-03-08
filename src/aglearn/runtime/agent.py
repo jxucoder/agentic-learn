@@ -130,12 +130,16 @@ def codex_cli_config(
     *,
     oss: bool = False,
     local_provider: str | None = None,
+    access_mode: str | None = None,
+    sandbox_mode: str = "danger-full-access",
 ) -> AgentCLIConfig:
     """Return the default Codex CLI configuration."""
-    access_mode = os.getenv("AGLEARN_CODEX_ACCESS_MODE", "bypass").strip().lower()
+    resolved_access_mode = (
+        access_mode or os.getenv("AGLEARN_CODEX_ACCESS_MODE", "bypass").strip().lower()
+    )
     access_args: list[str]
-    if access_mode in {"full-auto", "sandbox"}:
-        access_args = ["--full-auto", "--sandbox", "danger-full-access"]
+    if resolved_access_mode in {"full-auto", "sandbox"}:
+        access_args = ["--full-auto", "--sandbox", sandbox_mode]
     else:
         access_args = ["--dangerously-bypass-approvals-and-sandbox"]
 
