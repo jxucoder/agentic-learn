@@ -7,6 +7,7 @@ After all steps: agent analyzes all artifacts and writes a research report.
 from __future__ import annotations
 
 import logging
+import math
 import os
 import shutil
 import subprocess
@@ -80,13 +81,16 @@ def evolve(
             stdout=result.get("stdout", ""),
             stderr=result.get("stderr", ""),
         )
+        previous_best = journal.best()
         journal.add(exp)
 
         if exp.is_buggy:
             log.warning("  BUGGY | %s", (exp.hypothesis or "unknown")[:200])
         else:
             log.info("  score=%.4f | %s", exp.metric_value, exp.hypothesis[:120])
-            _save_best(journal, output_dir)
+            current_best = journal.best()
+            if _is_new_best(exp, previous_best, current_best):
+                _save_best(work_dir, exp, output_dir)
 
     best = journal.best()
     if best:
@@ -283,7 +287,16 @@ def _prepare_output_dir(output_dir: str) -> None:
     """Remove generated artifacts so each evolve() call starts fresh."""
     os.makedirs(output_dir, exist_ok=True)
 
-    generated_files = {"journal.jsonl", "best_solution.py", "report.md", "report.pdf"}
+    generated_files = {
+        "journal.jsonl",
+        "best_solution.py",
+        "best_submission.csv",
+        "best_validation_submission.csv",
+        "best_result.json",
+        "best_exploration.md",
+        "report.md",
+        "report.pdf",
+    }
     generated_dirs = {"_report"}
 
     for entry in os.listdir(output_dir):
@@ -347,9 +360,55 @@ def _convert_to_pdf(md_path: str) -> None:
         log.warning("report | PDF conversion failed: %s", e)
 
 
-def _save_best(journal: Journal, output_dir: str) -> None:
-    best = journal.best()
-    if best is None:
-        return
+def _save_best(work_dir: str, experiment: Experiment, output_dir: str) -> None:
     with open(os.path.join(output_dir, "best_solution.py"), "w", encoding="utf-8") as f:
-        f.write(best.code)
+        f.write(experiment.code)
+    _copy_if_exists(
+        os.path.join(work_dir, "submission.csv"),
+        os.path.join(output_dir, "best_submission.csv"),
+    )
+    _copy_if_exists(
+        os.path.join(work_dir, "validation_submission.csv"),
+        os.path.join(output_dir, "best_validation_submission.csv"),
+    )
+    _copy_if_exists(
+        os.path.join(work_dir, "result.json"),
+        os.path.join(output_dir, "best_result.json"),
+    )
+    _copy_if_exists(
+        os.path.join(work_dir, "exploration.md"),
+        os.path.join(output_dir, "best_exploration.md"),
+    )
+
+
+def _copy_if_exists(source: str, destination: str) -> None:
+    if os.path.exists(source):
+        shutil.copy2(source, destination)
+    elif os.path.exists(destination):
+        os.remove(destination)
+
+
+def _is_new_best(
+    experiment: Experiment,
+    previous_best: Experiment | None,
+    current_best: Experiment | None,
+) -> bool:
+    if current_best is None or current_best.id != experiment.id:
+        return False
+    if previous_best is None:
+        return True
+    return _metric_value(experiment.metric_value) > _metric_value(
+        previous_best.metric_value
+    )
+
+
+def _metric_value(value: float | None) -> float:
+    if value is None:
+        return float("-inf")
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return float("-inf")
+    if not math.isfinite(numeric):
+        return float("-inf")
+    return numeric

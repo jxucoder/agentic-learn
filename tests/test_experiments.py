@@ -9,15 +9,16 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
-
-from aglearn.runtime.loop import EvaluationResult
 from aglearn_experiments.arena import (
     ContestantSpec,
+    _prepare_contestant_workspace,
     _resolve_cli,
+    build_public_validation_evaluator,
     build_submission_evaluator,
     run_arena,
 )
 from aglearn_experiments.benchmarks import _parse_brief_payload, generate_benchmark
+from aglearn_experiments.modal_backend import _modal_worker_command, _sandbox_secrets
 
 
 def test_generate_benchmark_writes_manifest_and_challenge(tmp_path: Path):
@@ -237,6 +238,54 @@ def test_submission_evaluator_scores_hidden_solution(tmp_path: Path):
     assert result_payload["source"] == "hidden_submission_eval"
 
 
+def test_public_validation_evaluator_uses_validation_script(tmp_path: Path):
+    manifest = generate_benchmark(
+        task_type="classification",
+        seed=3,
+        samples=120,
+        noise=0.1,
+        output_root=str(tmp_path),
+        experiment_name="clear-signal",
+        brief_generator=lambda prompt, model, cwd: (
+            {
+                "title": "Clear Signal",
+                "short_description": "A benchmark.",
+                "scenario": "Predict the target.",
+                "objective": "Maximize F1.",
+                "data_highlights": ["A"],
+                "modeling_challenges": ["B"],
+                "submission_requirements": ["C"],
+                "evaluation_summary": "Public validation uses F1.",
+            },
+            "stub",
+        ),
+    )
+    work_dir = tmp_path / "work"
+    work_dir.mkdir()
+
+    validation_df = pd.read_csv(manifest.validation_path)
+    validation_df[["row_id", "target"]].to_csv(
+        work_dir / "validation_submission.csv",
+        index=False,
+    )
+    pd.read_csv(manifest.sample_submission_path).to_csv(
+        work_dir / "submission.csv",
+        index=False,
+    )
+
+    evaluator = build_public_validation_evaluator(manifest.to_dict())
+    result = evaluator(str(work_dir), {})
+
+    assert result.is_buggy is False
+    assert result.metric_value == 1.0
+    result_payload = json.loads((work_dir / "result.json").read_text(encoding="utf-8"))
+    assert result_payload["source"] == "public_validation_eval"
+    validator_payload = json.loads(
+        (work_dir / "submission_validation.json").read_text(encoding="utf-8")
+    )
+    assert validator_payload["ok"] is True
+
+
 def test_contestant_spec_parses_custom_fields():
     spec = ContestantSpec.from_dict(
         {
@@ -247,12 +296,72 @@ def test_contestant_spec_parses_custom_fields():
             "model_flag": ["--model"],
             "prompt_mode": "arg",
             "prompt_flag": ["--prompt"],
+            "secret_env": ["OPENAI_API_KEY"],
         }
     )
 
     assert spec.program == "runner"
     assert spec.args_before_model == ("--json",)
     assert spec.prompt_mode == "arg"
+    assert spec.secret_env == ("OPENAI_API_KEY",)
+
+
+def test_prepare_contestant_workspace_writes_sanitized_manifest(tmp_path: Path):
+    manifest_dir = tmp_path / "exp"
+    manifest_dir.mkdir()
+    for name in (
+        "train.csv",
+        "validation.csv",
+        "validation_sample.csv",
+        "test.csv",
+        "sample.csv",
+        "solution.csv",
+    ):
+        pd.DataFrame({"row_id": [1], "target": [0]}).to_csv(
+            manifest_dir / name, index=False
+        )
+    (manifest_dir / "validate_submission.py").write_text(
+        "print('ok')\n", encoding="utf-8"
+    )
+    (manifest_dir / "evaluate_validation.py").write_text(
+        "print('ok')\n", encoding="utf-8"
+    )
+
+    copied = _prepare_contestant_workspace(
+        tmp_path / "run",
+        manifest={
+            "benchmark_id": "mars-demo",
+            "slug": "mars-demo",
+            "task_type": "classification",
+            "metric": "f1",
+            "target_column": "target",
+            "submission_filename": "submission.csv",
+            "public_description": "demo",
+            "agent_instructions": "demo",
+            "train_path": str((manifest_dir / "train.csv").resolve()),
+            "validation_path": str((manifest_dir / "validation.csv").resolve()),
+            "validation_sample_submission_path": str(
+                (manifest_dir / "validation_sample.csv").resolve()
+            ),
+            "test_path": str((manifest_dir / "test.csv").resolve()),
+            "sample_submission_path": str((manifest_dir / "sample.csv").resolve()),
+            "solution_path": str((manifest_dir / "solution.csv").resolve()),
+            "evaluation_script_path": str(
+                (manifest_dir / "evaluate_validation.py").resolve()
+            ),
+            "validator_script_path": str(
+                (manifest_dir / "validate_submission.py").resolve()
+            ),
+        },
+    )
+
+    public_manifest = json.loads(
+        Path(copied["public_manifest_path"]).read_text(encoding="utf-8")
+    )
+    assert "solution_path" not in public_manifest
+    assert public_manifest["train_path"] == "data/train.csv"
+    assert public_manifest["validation_path"] == "data/validation.csv"
+    assert public_manifest["evaluation_script_path"] == "evaluate_validation.py"
 
 
 def test_run_arena_uses_private_contestant_workspaces(tmp_path: Path, monkeypatch):
@@ -331,18 +440,16 @@ def test_run_arena_uses_private_contestant_workspaces(tmp_path: Path, monkeypatc
         assert "validation_data" in task.resource_paths
         assert "validation_sample_submission" in task.resource_paths
         assert "validation_evaluator" in task.resource_paths
-        (output_dir / "submission.csv").write_text(
+        (output_dir / "best_submission.csv").write_text(
             "row_id,target\n3,0\n4,1\n", encoding="utf-8"
+        )
+        (output_dir / "run_summary.json").write_text(
+            json.dumps({"public_score": 1.0, "status": "ok"}),
+            encoding="utf-8",
         )
         return type("Best", (), {"metric_value": 1.0})()
 
     monkeypatch.setattr("aglearn_experiments.arena.evolve", fake_evolve)
-    monkeypatch.setattr(
-        "aglearn_experiments.arena.build_submission_evaluator",
-        lambda manifest: (
-            lambda work_dir, result: EvaluationResult(metric_value=1.0, is_buggy=False)
-        ),
-    )
 
     leaderboard = run_arena(
         manifest_path=str(manifest_path),
@@ -354,9 +461,48 @@ def test_run_arena_uses_private_contestant_workspaces(tmp_path: Path, monkeypatc
 
     assert len(leaderboard["contestants"]) == 2
     assert (tmp_path / "arena" / "silent-orbit" / "leaderboard.json").exists()
+    assert leaderboard["contestants"][0]["public_score"] == 1.0
 
 
 def test_codex_contestants_use_workspace_sandbox():
     cli = _resolve_cli(ContestantSpec(name="codex", provider="codex"))
     assert "--sandbox" in cli.args_before_model
     assert "workspace-write" in cli.args_before_model
+
+
+def test_modal_worker_command_uses_private_input_mount():
+    assert _modal_worker_command(steps=8, timeout=600) == [
+        "uv",
+        "run",
+        "python",
+        "-m",
+        "aglearn_experiments.modal_worker",
+        "--manifest",
+        "/workspace/inputs/contestant_manifest.json",
+        "--contestant",
+        "/workspace/inputs/contestant_spec.json",
+        "--steps",
+        "8",
+        "--timeout",
+        "600",
+        "--output-dir",
+        "/workspace/output",
+    ]
+
+
+def test_modal_backend_requires_provider_secrets(monkeypatch):
+    class DummySecret:
+        @staticmethod
+        def from_dict(payload):
+            return payload
+
+    class DummyModal:
+        Secret = DummySecret
+
+    monkeypatch.setenv("OPENAI_API_KEY", "test-openai-key")
+    secrets = _sandbox_secrets(
+        DummyModal,
+        ContestantSpec(name="codex", provider="codex", model="gpt-5.3-codex"),
+    )
+
+    assert secrets == [{"OPENAI_API_KEY": "test-openai-key"}]

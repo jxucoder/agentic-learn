@@ -159,3 +159,87 @@ def test_evolve_can_use_external_evaluator(tmp_path: Path, monkeypatch):
 
     assert best is not None
     assert best.metric_value == 0.9
+
+
+def test_evolve_preserves_best_submission_artifacts(tmp_path: Path, monkeypatch):
+    step_metrics = iter([0.9, 0.4])
+
+    def fake_run(
+        prompt: str,
+        work_dir: str,
+        *,
+        model: str | None = None,
+        timeout: int = loop.DEFAULT_TIMEOUT_SECONDS,
+        cli=None,
+    ) -> dict[str, object]:
+        del prompt, model, timeout, cli
+        work_path = Path(work_dir)
+        if work_path.name == "_report":
+            return {
+                "code": "",
+                "hypothesis": "",
+                "exploration": "",
+                "metric_value": None,
+                "is_buggy": True,
+                "stdout": "",
+                "stderr": "",
+            }
+
+        metric = next(step_metrics)
+        code = f"print({metric})\n"
+        row_value = 1 if metric > 0.5 else 0
+        validation_value = 11 if metric > 0.5 else 12
+        (work_path / "solution.py").write_text(code, encoding="utf-8")
+        (work_path / "submission.csv").write_text(
+            f"row_id,target\n1,{row_value}\n",
+            encoding="utf-8",
+        )
+        (work_path / "validation_submission.csv").write_text(
+            f"row_id,target\n10,{validation_value}\n",
+            encoding="utf-8",
+        )
+        (work_path / "result.json").write_text(
+            json.dumps({"metric": metric}),
+            encoding="utf-8",
+        )
+        (work_path / "exploration.md").write_text(
+            f"metric={metric}\n",
+            encoding="utf-8",
+        )
+        return {
+            "code": code,
+            "hypothesis": f"metric {metric}",
+            "exploration": f"metric={metric}",
+            "metric_value": metric,
+            "is_buggy": False,
+            "stdout": "",
+            "stderr": "",
+        }
+
+    monkeypatch.setattr(loop.agent, "run", fake_run)
+
+    best = loop.evolve(
+        loop.TaskConfig(
+            description="demo",
+            data_path="/tmp/data.csv",
+            target_column="target",
+            metric="r2",
+        ),
+        max_steps=2,
+        output_dir=str(tmp_path),
+    )
+
+    assert best is not None
+    assert best.metric_value == 0.9
+    assert (tmp_path / "best_submission.csv").read_text(encoding="utf-8") == (
+        "row_id,target\n1,1\n"
+    )
+    assert (tmp_path / "best_validation_submission.csv").read_text(
+        encoding="utf-8"
+    ) == "row_id,target\n10,11\n"
+    assert json.loads((tmp_path / "best_result.json").read_text(encoding="utf-8")) == {
+        "metric": 0.9
+    }
+    assert (tmp_path / "best_exploration.md").read_text(
+        encoding="utf-8"
+    ) == "metric=0.9\n"

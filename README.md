@@ -81,9 +81,12 @@ uv run python experiments/generate_setup.py --task-type multiclass --seed 42
 uv run python experiments/run_arena.py \
   --manifest experiments/generated/silent-orbit/manifest.json \
   --contestants experiments/configs/contestants.example.json
+uv run python experiments/run_modal_arena.py \
+  --manifest experiments/generated/silent-orbit/manifest.json \
+  --contestants experiments/configs/contestants.example.json
 ```
 
-The arena runner evaluates `submission.csv` against the hidden solution file instead of trusting each model's self-reported cross-validation metric.
+The arena loop now uses `validation_submission.csv` plus the public evaluator for iterative model selection, then scores the saved best `submission.csv` against the hidden solution once at the end. `run_modal_arena.py` executes each contestant inside its own Modal sandbox for stronger isolation.
 
 ---
 
@@ -177,11 +180,14 @@ src/aglearn/
 
 src/aglearn_experiments/
 ├── benchmarks.py       # Gemini-briefed Kaggle benchmark generation
-└── arena.py            # Multi-model hidden-test leaderboard runner
+├── arena.py            # Local multi-model leaderboard runner
+├── modal_backend.py    # Modal sandbox executor
+└── modal_worker.py     # Sandbox-side contestant loop entrypoint
 
 experiments/
 ├── generate_setup.py         # Gemini-backed experiment setup generator
 ├── run_arena.py              # Multi-model competition runner
+├── run_modal_arena.py        # Isolated Modal competition runner
 ├── configs/
 │   └── contestants.example.json
 └── generated/                # Created on demand

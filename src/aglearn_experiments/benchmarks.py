@@ -734,11 +734,11 @@ def _build_agent_instructions(bundle: _Bundle) -> str:
         "- Use the `validation_data` resource as a fixed public holdout and `validation_sample_submission` for its prediction schema.\n"
         "- Use the `validation_evaluator` resource to score `validation_submission.csv` during development.\n"
         "- Use the `test_data` resource for final predictions, `sample_submission` for schema, and `submission_validator` for preflight validation.\n"
-        "- If helpful, write `validation_submission.csv` for the validation rows and run `uv run python inputs/evaluate_validation.py --submission validation_submission.csv`.\n"
+        "- Write `validation_submission.csv` for the validation rows and score it with the exact `validation_evaluator` path provided in the task resources.\n"
         f"- Write `submission.csv` in the current working directory with columns `row_id,{bundle.target_column}`.\n"
         "- Ensure `submission.csv` contains every test row exactly once and no duplicate `row_id` values.\n"
-        "- Before finishing, run `uv run python inputs/validate_submission.py --submission submission.csv` and fix any reported errors.\n"
-        "- You may report your own CV or validation metric in `result.json`, but leaderboard scoring is computed externally from `submission.csv`.\n"
+        "- Before finishing, run the exact `submission_validator` resource path against `submission.csv` and fix any reported errors.\n"
+        "- The trusted runner uses `validation_submission.csv` plus the public evaluator for step selection, then scores the saved best `submission.csv` on the hidden test only once at the end.\n"
         f"- Optimize for hidden-test {bundle.metric}, not only local CV.\n"
     )
 

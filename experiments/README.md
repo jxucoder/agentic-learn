@@ -31,4 +31,16 @@ uv run python experiments/run_arena.py \
 Arena results are written to `output/arena/<slug>/`.
 
 Each contestant runs in its own private workspace under `output/arena/<slug>/.private_runs/<contestant>/`.
+Each step is selected by the public validation evaluator, and the final ranking comes from the saved best `submission.csv` scored once on the hidden solution after the loop finishes.
 The public leaderboard is written only after all runs complete, so contestants do not get sibling output paths or shared benchmark copies in their workspace.
+
+## Run the isolated Modal arena
+
+```bash
+uv run python experiments/run_modal_arena.py \
+  --manifest experiments/generated/multiclass-seed-42/manifest.json \
+  --contestants experiments/configs/contestants.example.json
+```
+
+Modal runs are written to `output/modal_arena/<slug>/`.
+Each contestant gets its own Modal sandbox, its own mounted workspace, and only the secrets required for that provider.
