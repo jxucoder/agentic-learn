@@ -47,7 +47,7 @@ Without it, the agent collapses into incremental hyperparameter tweaks. The brie
 ## Quickstart
 
 **Prerequisites:** Python ≥ 3.11 and at least one supported agent CLI installed.
-The core loop defaults to [Codex CLI](https://github.com/openai/codex), and the experiment scripts can also use Gemini CLI for benchmark brief generation plus Claude Code or Codex OSS-backed local models in the arena.
+The core loop defaults to [Codex CLI](https://github.com/openai/codex).
 
 ```bash
 uv sync --dev
@@ -71,22 +71,12 @@ The best solution is saved to `./output/best_solution.py`. Full history lives in
 
 ---
 
-## Core vs Experiments
+## Scope
 
-`aglearn` is now the reusable core package: runtime CLI invocation, journaling, and the evolve loop.
-Benchmark generation, Gemini-written Kaggle prompts, and model-vs-model arena runs live in the separate `aglearn_experiments` package plus repo scripts.
-
-```bash
-uv run python experiments/generate_setup.py --task-type multiclass --seed 42
-uv run python experiments/run_arena.py \
-  --manifest experiments/generated/silent-orbit/manifest.json \
-  --contestants experiments/configs/contestants.example.json
-uv run python experiments/run_modal_arena.py \
-  --manifest experiments/generated/silent-orbit/manifest.json \
-  --contestants experiments/configs/contestants.example.json
-```
-
-The arena loop now uses `validation_submission.csv` plus the public evaluator for iterative model selection, then scores the saved best `submission.csv` against the hidden solution once at the end. `run_modal_arena.py` executes each contestant inside its own Modal sandbox for stronger isolation.
+This repo now contains only the reusable learning loop: runtime CLI invocation,
+journaling, synthetic task helpers, and iterative solution search. Benchmark
+generation and leaderboard orchestration have moved to a dedicated benchmarking
+repo.
 
 ---
 
@@ -99,52 +89,9 @@ The arena loop now uses `validation_submission.csv` plus the public evaluator fo
 | `timeout` | `300` | Seconds before an agent run is killed |
 | `output_dir` | `./output` | Where journal and step dirs are written |
 | `task.instructions` | `""` | Optional human steering (free text) |
-| `task.resource_paths` | `{}` | Extra files exposed to the agent, such as hidden-test inputs or sample submissions |
+| `task.resource_paths` | `{}` | Extra files exposed to the agent, such as sample submissions or helper scripts |
 
 ---
-
-## Experiment Setups
-
-Use Gemini to generate public competition-style setups on top of synthetic data bundles. If you omit `--name`, each setup gets a random two-word experiment name. Each generated setup writes a Kaggle-style bundle under `experiments/generated/<slug>/data/`:
-- `synth_<name>_train.csv` (labeled train split, used by the agent)
-- `synth_<name>_validation.csv` (labeled public validation split)
-- `synth_<name>_validation_sample_submission.csv` (prediction template for the validation split)
-- `synth_<name>_test.csv` (unlabeled test split)
-- `synth_<name>_sample_submission.csv`
-- `synth_<name>_solution.csv` (hidden labels for offline evaluation)
-- `synth_<name>_meta.json` (paths + generation details)
-- `challenge.md` (Gemini-written public problem statement)
-- `validate_submission.py` (public schema/row-coverage validator for `submission.csv`)
-- `evaluate_validation.py` (public scorer for the validation split)
-- `manifest.json` (machine-readable setup for the arena)
-
-When `--gemini-model` is omitted, the generator inspects the installed Gemini CLI package and prefers the newest locally available model first. On this machine that means `gemini-3-pro-preview` before stable fallbacks like `gemini-2.5-pro`.
-By default, setup generation is Gemini-only: if Gemini CLI cannot produce the brief, the command fails instead of silently falling back. Use `--allow-template-fallback` only for offline debugging.
-
-```bash
-uv run python experiments/generate_setup.py --task-type multiclass --seed 42
-uv run python experiments/generate_setup.py --task-type temporal_regression --seed 123
-```
-
-Arena runs are isolated per contestant under `output/arena/<slug>/.private_runs/`, and the consolidated leaderboard is published only after every contestant finishes.
-
-```mermaid
-graph LR
-    subgraph "Classification (F1)"
-        C1["Step 1<br/>0.889<br/>HistGBT"] --> C2["Step 2<br/>0.912<br/>LogReg"]
-        C2 --> C3["Best<br/>0.919<br/>Stacking"]
-    end
-
-    subgraph "Regression (R²)"
-        R1["Step 1<br/>0.757<br/>HistGBT"] --> R2["Best<br/>0.816<br/>RidgeCV"]
-    end
-
-    style C3 fill:#b3ffb3,stroke:#009900,stroke-width:3px
-    style R2 fill:#b3ffb3,stroke:#009900,stroke-width:3px
-```
-
-Generated setups are the intended benchmark surface. Fixed public-data tasks and hand-authored benchmark launchers have been removed to avoid leakage-prone baselines becoming part of the default workflow.
-
 ---
 
 ## What Each Step Produces
@@ -177,20 +124,6 @@ src/aglearn/
 ├── data/
 │   ├── synth.py        # Synthetic Kaggle-style dataset generator
 │   └── synth_hard.py   # Harder synthetic benchmark generators
-
-src/aglearn_experiments/
-├── benchmarks.py       # Gemini-briefed Kaggle benchmark generation
-├── arena.py            # Local multi-model leaderboard runner
-├── modal_backend.py    # Modal sandbox executor
-└── modal_worker.py     # Sandbox-side contestant loop entrypoint
-
-experiments/
-├── generate_setup.py         # Gemini-backed experiment setup generator
-├── run_arena.py              # Multi-model competition runner
-├── run_modal_arena.py        # Isolated Modal competition runner
-├── configs/
-│   └── contestants.example.json
-└── generated/                # Created on demand
 ```
 
 ---
